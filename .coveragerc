@@ -2,7 +2,7 @@
 branch = True
 
 source = 
-    veriutils
+    kea
 
 [report]
 exclude_lines = 

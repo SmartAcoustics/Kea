@@ -1,8 +1,10 @@
+from .axi_lite import AxiLiteInterface, AxiLiteMasterBFM
+from . import axi_lite
 from unittest import TestCase
-from veriutils import *
+from veriutils import myhdl_cosimulation
 from myhdl import *
 
-from veriutils import axi_lite
+import random
 
 try:
     import Queue as queue

@@ -240,8 +240,9 @@ class AxiLiteMasterBFM(object):
         self.read_responses = Queue()
 
     def add_write_transaction(
-        self, write_address, write_data, write_strobes, write_protection,
-        address_delay=0, data_delay=0, response_ready_delay=0):
+        self, write_address, write_data, write_strobes=None,
+        write_protection=None, address_delay=0, data_delay=0,
+        response_ready_delay=0):
         '''Add write transactions to the BFM.
         '''
 
@@ -254,8 +255,9 @@ class AxiLiteMasterBFM(object):
                                      'response_ready_delay': (
                                          response_ready_delay),})
 
-    def add_read_transaction(self, read_address, read_protection,
-                             address_delay=0, data_delay=0):
+    def add_read_transaction(
+        self, read_address, read_protection=None,
+        address_delay=0, data_delay=0):
         ''' Add read transactions to the BFM.
         '''
 

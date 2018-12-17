@@ -1,6 +1,9 @@
 
+from .axi_stream import (
+    AxiStreamInterface, AxiStreamMasterBFM, AxiStreamSlaveBFM,
+    axi_stream_buffer, axi_master_playback)
 from unittest import TestCase
-from veriutils import *
+from veriutils import myhdl_cosimulation
 from myhdl import *
 import myhdl
 

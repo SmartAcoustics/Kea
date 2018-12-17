@@ -1,7 +1,9 @@
-*.pyc
+venv
 *.swp
-build
-dist
-htmlcov
-.coverage
+.*.swo
+*.pyc
+*.vcd*
 *~
+Kea.egg-info
+vivado.jou
+vivado.log
