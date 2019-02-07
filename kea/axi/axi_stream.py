@@ -115,7 +115,9 @@ class AxiStreamMasterBFM(object):
         self._data = {}
         self._TLASTs = {}
 
-    def add_data(self, data, incomplete_last_packet=False):#, stream_ID=0, stream_destination=0):
+    def add_data(
+        self, data, incomplete_last_packet=False, stream_ID=0,
+        stream_destination=0):
         '''Add data to this BFM. ``data`` is a list of lists, each sublist of
         which comprises a packet (terminated by ``TLAST`` being asserted).
 
@@ -126,14 +128,11 @@ class AxiStreamMasterBFM(object):
         which case the value acts like a no-op, setting the ``TVALID`` flag to
         ``False`` for that data value. This allows the calling code to insert
         delays in the data output.
-        '''
-        #The ``stream_ID`` and ``stream_destination`` parameters are used to
-        #set the ``TID`` and ``TDEST`` signals respectively for the data
-        #provided.
-        #'''
 
-        stream_ID = 0
-        stream_destination = 0
+        The ``stream_ID`` and ``stream_destination`` parameters are used to
+        set the ``TID`` and ``TDEST`` signals respectively for the data
+        provided.
+        '''
 
         new_TLASTs = deque([True for packet in data])
         if incomplete_last_packet:
@@ -151,14 +150,27 @@ class AxiStreamMasterBFM(object):
 
             self._TLASTs[(stream_ID, stream_destination)] = new_TLASTs
 
+    def add_multi_stream_data(self, data):
+        ''' Add multi stream data to this BFM. Multi stream data should be a
+        dictionary with each entry into the dict a list of lists as required
+        by add_data. The dictionary keys should be of the form:
+
+            (stream ID, stream dest)
+        '''
+
+        for stream in data.keys():
+            self.add_data(
+                data[stream], stream_ID=stream[0],
+                stream_destination=stream[1])
+
     @block
     def model(self, clock, interface, reset=None):
 
+        packets = {}
+        packets_TLASTs = {}
         model_rundata = {}
-        None_data = Signal(False)
 
-        stream_ID = 0
-        stream_destination = 0
+        None_data = Signal(False)
 
         use_TLAST = hasattr(interface, 'TLAST')
 
@@ -176,147 +188,191 @@ class AxiStreamMasterBFM(object):
         else:
             internal_TLAST = Signal(False)
 
+        if interface._TDEST_width is not None:
+            internal_TDEST = Signal(intbv(0)[interface._TDEST_width:])
+
+            @always_comb
+            def assign_TDEST():
+                interface.TDEST.next = internal_TDEST
+
+            return_instances.append(assign_TDEST)
+
+        else:
+            internal_TDEST = Signal(intbv(0)[4:])
+
+        if interface._TID_width is not None:
+            internal_TID = Signal(intbv(0)[interface._TID_width:])
+
+            @always_comb
+            def assign_TID():
+                interface.TID.next = internal_TID
+
+            return_instances.append(assign_TID)
+
+        else:
+            internal_TID = Signal(intbv(0)[4:])
+
         if reset is None:
             reset = False
 
         @always(clock.posedge)
         def model_inst():
-
             if reset:
-                self._data = {}
-                if 'packet' in model_rundata:
-                    del model_rundata['packet']
+                self._data.clear()
+                packets.clear()
+                packets_TLASTs.clear()
                 interface.TVALID.next = False
                 internal_TLAST.next = False
 
             else:
+
+                for k in self._data.keys():
+                    if k not in packets.keys():
+                        if len(self._data[k]) > 0:
+                            # self._data contains an ID and destination
+                            # combination that is not in packets therefore we
+                            # should add a packet from this combination.
+                            packets[k] = self._data[k].popleft()
+                            packets_TLASTs[k] = self._TLASTs[k].popleft()
+
+                    if k in packets.keys():
+                        while len(packets[k]) == 0:
+                            # Length of the packet is zero so add the next one
+                            if len(self._data[k]) > 0:
+                                packets[k] = self._data[k].popleft()
+                                packets_TLASTs[k] = self._TLASTs[k].popleft()
+
+                            else:
+                                del packets[k]
+                                # Nothing left to get, so we drop out.
+                                break
+
                 # We need to try to update either when a piece of data has
                 # been propagated (TVALID and TREADY) or when we previously
                 # didn't have any data, or the data was None (not TVALID)
                 if ((interface.TVALID and interface.TREADY) or
                     not interface.TVALID):
 
-                    if 'packet' not in model_rundata:
-                        model_rundata['packet'] = []
-                        while len(model_rundata['packet']) == 0:
+                    if len(tuple(packets.keys())) > 0:
+                        # Randomly pick a packet.
+                        model_rundata['packet_key'] = (
+                            random.choice(tuple(packets.keys())))
 
-                            try:
-                                if len(self._data[
-                                    (stream_ID, stream_destination)]) > 0:
+                        if len(packets[model_rundata['packet_key']]) > 0:
 
-                                    model_rundata['packet'] = self._data[
-                                        (stream_ID,
-                                         stream_destination)].popleft()
-                                    model_rundata['packet_TLAST'] = (
-                                        self._TLASTs[
-                                            (stream_ID,
-                                             stream_destination)].popleft())
+                            internal_TID.next = (
+                                model_rundata['packet_key'][0])
+                            internal_TDEST.next = (
+                                model_rundata['packet_key'][1])
 
-                                else:
-                                    # Nothing left to get, so we drop out.
-                                    break
+                            if len(packets[model_rundata['packet_key']]) == 1:
 
-                            except KeyError:
-                                break
+                                internal_TLAST.next = (packets_TLASTs[
+                                    model_rundata['packet_key']])
+                                value = (packets[
+                                    model_rundata['packet_key']].popleft())
 
-                    if len(model_rundata['packet']) > 0:
+                                # Nothing left in the packet
+                                del packets[model_rundata['packet_key']]
 
-                        if len(model_rundata['packet']) == 1:
-
-                            internal_TLAST.next = (
-                                model_rundata['packet_TLAST'])
-                            value = model_rundata['packet'].popleft()
-
-                            # Nothing left in the packet
-                            del model_rundata['packet']
-
-                        else:
-                            value = model_rundata['packet'].popleft()
-
-                            # We need to set TLAST if all the remaining values
-                            # in the packet are None
-                            if all(
-                                [val is None for val in
-                                 model_rundata['packet']]):
-
-                                internal_TLAST.next = (
-                                    model_rundata['packet_TLAST'])
                             else:
-                                internal_TLAST.next = False
+                                value = (packets[
+                                    model_rundata['packet_key']].popleft())
 
-                        if value is not None:
-                            None_data.next = False
-                            interface.TDATA.next = value
-                            interface.TVALID.next = True
+                                # We need to set TLAST if all the remaining
+                                # values in the packet are None
+                                if all(
+                                    [val is None for val in
+                                     packets[model_rundata['packet_key']]]):
+
+                                    internal_TLAST.next = (packets_TLASTs[
+                                        model_rundata['packet_key']])
+                                else:
+                                    internal_TLAST.next = False
+
+                            if value is not None:
+                                None_data.next = False
+                                interface.TDATA.next = value
+                                interface.TVALID.next = True
+                            else:
+                                None_data.next = True
+                                interface.TVALID.next = False
+
                         else:
-                            None_data.next = True
                             interface.TVALID.next = False
+                            # no data, so simply remove the packet for
+                            # initialisation next time
+                            del packets[model_rundata['packet_key']]
 
                     else:
                         interface.TVALID.next = False
-                        # no data, so simply remove the packet for
-                        # initialisation next time
-                        del model_rundata['packet']
 
         return_instances.append(model_inst)
 
         return return_instances
 
-
 class AxiStreamSlaveBFM(object):
-    '''An AXI4 Stream Slave MyHDL bus functional model.
+    '''An AXI4 Stream Slave MyHDL bus functional model which supports multiple
+    channels as defined by TID and TDEST.
     '''
 
     @property
-    def current_packet(self):
-        return [copy.copy(val) for val in self._current_packet]
-
-    @property
-    def current_packet_with_validity(self):
-        return [copy.copy(val) for val in self._current_packet_with_validity]
+    def current_packets(self):
+        return copy.deepcopy(self._current_packets)
 
     @property
     def completed_packets(self):
-        copied_completed_packets = []
-        for packet in self._completed_packets:
-            copied_completed_packets.append(
-                [copy.copy(val) for val in packet])
-
-        return copied_completed_packets
+        return copy.deepcopy(self._completed_packets)
 
     @property
-    def completed_packets_with_validity(self):
-        copied_completed_packets = []
-        for packet in self._completed_packets_with_validity:
-            copied_completed_packets.append(
-                [copy.copy(val) for val in packet])
-
-        return copied_completed_packets
+    def signal_record(self):
+        return copy.deepcopy(self._signal_record)
 
     def __init__(self):
         '''Create an AXI4 Stream slave bus functional model (BFM).
 
         Valid data that is received is recorded. Completed packets are
         available for inspection through the ``completed_packets``
-        property.
+        property. This will return a dictionary of the received packets
+        on all the streams. The stream TID and TDEST form the dictionary keys:
+            tuple(TID, TDEST)
+        The dictionary entries are a deque of deques where each sub deque is a
+        new packet.
 
         The packet currently being populated can be found on the
-        ``current_packet`` attribute. This provides a snapshot and does
-        not change with the underlying data structure.
+        ``current_packets`` attribute. This provides a snapshot and does
+        not change with the underlying data structure. This will return a
+        dictionary of the current packets on all the streams. The stream TID
+        and TDEST form the dictionary keys:
+            tuple(TID, TDEST)
+        The dictionary entries are a deque which is the current packet for
+        that stream.
 
         Currently ``TUSER`` is ignored.
 
         The MyHDL model is instantiated using the ``model`` method.
         '''
-        self.reset()
+        self._completed_packets = {}
+        self._current_packets = {}
+
+        self._signal_record = {
+            'TDATA': deque([]),
+            'TID': deque([]),
+            'TDEST': deque([]),
+            'TLAST': deque([]),
+        }
 
     def reset(self):
         '''Clears the current set of completed and current packets.
         '''
-        self._completed_packets = []
-        self._current_packet = []
-        self._completed_packets_with_validity = []
-        self._current_packet_with_validity = []
+        self._completed_packets.clear()
+        self._current_packets.clear()
+
+        self._signal_record.clear()
+        self._signal_record['TDATA'] = deque([])
+        self._signal_record['TID'] = deque([])
+        self._signal_record['TDEST'] = deque([])
+        self._signal_record['TLAST'] = deque([])
 
     @block
     def model(self, clock, interface, TREADY_probability=1.0):
@@ -338,7 +394,12 @@ class AxiStreamSlaveBFM(object):
         ``TREADY_probability`` is set to ``0.0``, but the driver code is
         still implemented in that case).
         '''
+
+        model_rundata = {'stream': (0, 0)}
+
         use_TLAST = hasattr(interface, 'TLAST')
+
+        return_instances = []
 
         if use_TLAST:
             internal_TLAST = Signal(interface.TLAST.val)
@@ -347,50 +408,108 @@ class AxiStreamSlaveBFM(object):
             def assign_TLAST():
                 internal_TLAST.next = interface.TLAST
 
+            return_instances.append(assign_TLAST)
+
         else:
             internal_TLAST = Signal(False)
 
-            @always(clock.posedge)
-            def assign_TLAST():
-                internal_TLAST.next = False
+        if interface._TDEST_width is not None:
+            internal_TDEST = (
+                Signal(intbv(interface.TDEST.val)[interface._TDEST_width:]))
 
-        @always(clock.posedge)
-        def TREADY_driver():
-            if TREADY_probability > random.random():
-                interface.TREADY.next = True
-            else:
-                interface.TREADY.next = False
+            @always_comb
+            def assign_TDEST():
+                internal_TDEST.next = interface.TDEST
+
+            return_instances.append(assign_TDEST)
+
+        else:
+            internal_TDEST = Signal(intbv(0)[4:])
+
+        if interface._TID_width is not None:
+            internal_TID = (
+                Signal(intbv(interface.TID.val)[interface._TID_width:]))
+
+            @always_comb
+            def assign_TID():
+                internal_TID.next = interface.TID
+
+            return_instances.append(assign_TID)
+
+        else:
+            internal_TID = Signal(intbv(0)[4:])
+
+        if TREADY_probability is not None:
+
+            @always(clock.posedge)
+            def TREADY_driver():
+                if TREADY_probability > random.random():
+                    interface.TREADY.next = True
+                else:
+                    interface.TREADY.next = False
+
+            return_instances.append(TREADY_driver)
 
         @always(clock.posedge)
         def model_inst():
 
+            if interface.TREADY:
+                if interface.TVALID:
+                    self._signal_record['TDATA'].append(
+                        copy.copy(int(interface.TDATA.val)))
+                else:
+                    self._signal_record['TDATA'].append(None)
+
+                self._signal_record['TID'].append(
+                    copy.copy(int(internal_TID.val)))
+                self._signal_record['TDEST'].append(
+                    copy.copy(int(internal_TDEST.val)))
+                self._signal_record['TLAST'].append(
+                    copy.copy(int(internal_TLAST.val)))
+
             if interface.TVALID and interface.TREADY:
-                self._current_packet.append(
-                    copy.copy(int(interface.TDATA._val)))
-                self._current_packet_with_validity.append(
-                    copy.copy(int(interface.TDATA._val)))
+                model_rundata['stream'] = (
+                    copy.copy(int(internal_TID.val)),
+                    copy.copy(int(internal_TDEST.val)))
+
+                if model_rundata['stream'] not in (
+                    self._current_packets.keys()):
+
+                    # Stream does not yet exist in current packet record so
+                    # create it and add the data
+                    self._current_packets[model_rundata['stream']] = deque(
+                        [copy.copy(int(interface.TDATA.val))])
+
+                else:
+                    self._current_packets[model_rundata['stream']].append(
+                        copy.copy(int(interface.TDATA.val)))
 
                 if internal_TLAST:
                     # End of a packet, so copy the current packet into
-                    # complete_packets and empty the current packet.
-                    self._completed_packets.append(
-                        copy.copy(self._current_packet))
-                    self._completed_packets_with_validity.append(
-                        copy.copy(self._current_packet_with_validity))
+                    # complete_packets.
+                    if model_rundata['stream'] not in (
+                        self._completed_packets.keys()):
 
-                    del self._current_packet[:]
-                    del self._current_packet_with_validity[:]
+                        # Stream does not yet exist in completed packet record
+                        # so create it and add the packet
+                        self._completed_packets[model_rundata['stream']] = (
+                            deque([self._current_packets[
+                                model_rundata['stream']]]))
 
-            elif not interface.TVALID and interface.TREADY:
-                self._current_packet_with_validity.append(None)
+                    else:
+                        # Add the packet to completed packets
+                        self._completed_packets[
+                            model_rundata['stream']].append(
+                                self._current_packets[
+                                    model_rundata['stream']])
 
-        return_instances = [model_inst, assign_TLAST]
+                    # Packet has completed and been added to the completed
+                    # packets dict so delete it
+                    del self._current_packets[model_rundata['stream']]
 
-        if TREADY_probability is not None:
-            return_instances.append(TREADY_driver)
+        return_instances.append(model_inst)
 
         return return_instances
-
 
 @block
 def axi_stream_buffer(
@@ -405,6 +524,34 @@ def axi_stream_buffer(
     transactions and buffers them for ``axi_stream_out``.
     '''
 
+    if ((axi_stream_in._TID_width is not None) and
+        (axi_stream_out._TID_width is None)):
+        raise ValueError(
+            'There is a TID on the input and so there must be a TID on the '
+            'output')
+
+    if ((axi_stream_in._TDEST_width is not None) and
+        (axi_stream_out._TDEST_width is None)):
+        raise ValueError(
+            'There is a TDEST on the input and so there must be a TDEST on '
+            'the output')
+
+    if ((axi_stream_in._TID_width is not None) and
+        (axi_stream_out._TID_width is not None)):
+
+        if axi_stream_in._TID_width > axi_stream_out._TID_width:
+            raise ValueError(
+                'TID on the output must be as wide or wider than TID on the '
+                'input')
+
+    if ((axi_stream_in._TDEST_width is not None) and
+        (axi_stream_out._TDEST_width is not None)):
+
+        if axi_stream_in._TDEST_width > axi_stream_out._TDEST_width:
+            raise ValueError(
+                'TDEST on the output must be as wide or wider than TDEST on '
+                'the input')
+
     data_buffer = deque([])
 
     internal_input_TLAST = Signal(False)
@@ -415,19 +562,19 @@ def axi_stream_buffer(
 
     data_in_buffer = Signal(False)
     use_internal_values = Signal(False)
+    await_next_word_in = Signal(False)
 
     use_input_TLAST = hasattr(axi_stream_in, 'TLAST')
     use_output_TLAST = hasattr(axi_stream_out, 'TLAST')
+
+    return_instances = []
 
     if use_input_TLAST:
         @always_comb
         def input_TLAST_assignment():
             internal_input_TLAST.next = axi_stream_in.TLAST
 
-    else:
-        @always(clock.posedge)
-        def input_TLAST_assignment():
-            internal_input_TLAST.next = False
+        return_instances.append(input_TLAST_assignment)
 
     if use_output_TLAST:
         @always_comb
@@ -437,8 +584,73 @@ def axi_stream_buffer(
             else:
                 axi_stream_out.TLAST.next = internal_input_TLAST
 
+        return_instances.append(output_TLAST_assignment)
+
+    if axi_stream_in._TID_width is not None:
+
+        internal_input_TID = (
+            Signal(intbv(axi_stream_in.TID.val)[axi_stream_in._TID_width:]))
+        internal_TID = (
+            Signal(intbv(axi_stream_in.TID.val)[axi_stream_in._TID_width:]))
+
+        @always_comb
+        def input_TID_assignment():
+            internal_input_TID.next = axi_stream_in.TID
+
+        return_instances.append(input_TID_assignment)
+
     else:
-        output_TLAST_assignment = None
+        internal_input_TID = Signal(intbv(0)[4:])
+        internal_TID = Signal(intbv(0)[4:])
+
+    if axi_stream_out._TID_width is not None:
+
+        @always_comb
+        def output_TID_assignment():
+            if use_internal_values:
+                axi_stream_out.TID.next = internal_TID
+            else:
+                axi_stream_out.TID.next = internal_input_TID
+
+        return_instances.append(output_TID_assignment)
+
+    if axi_stream_in._TDEST_width is not None:
+
+        internal_input_TDEST = (
+            Signal(intbv(axi_stream_in.TDEST.val)[
+                axi_stream_in._TDEST_width:]))
+        internal_TDEST = (
+            Signal(intbv(axi_stream_in.TDEST.val)[
+                axi_stream_in._TDEST_width:]))
+
+        @always_comb
+        def input_TDEST_assignment():
+            internal_input_TDEST.next = axi_stream_in.TDEST
+
+        return_instances.append(input_TDEST_assignment)
+
+    else:
+        internal_input_TDEST = Signal(intbv(0)[4:])
+        internal_TDEST = Signal(intbv(0)[4:])
+
+    if axi_stream_out._TDEST_width is not None:
+
+        @always_comb
+        def output_TDEST_assignment():
+            if use_internal_values:
+                axi_stream_out.TDEST.next = internal_TDEST
+            else:
+                axi_stream_out.TDEST.next = internal_input_TDEST
+
+        return_instances.append(output_TDEST_assignment)
+
+    if not passive_sink_mode:
+
+        @always(clock.posedge)
+        def TREADY_driver():
+            axi_stream_in.TREADY.next = True
+
+        return_instances.append(TREADY_driver)
 
     @always_comb
     def output_assignments():
@@ -447,13 +659,13 @@ def axi_stream_buffer(
             axi_stream_out.TVALID.next = internal_TVALID
             axi_stream_out.TDATA.next = internal_TDATA
 
+        elif await_next_word_in:
+            axi_stream_out.TVALID.next = False
+            axi_stream_out.TDATA.next = axi_stream_in.TDATA
+
         else:
             axi_stream_out.TVALID.next = axi_stream_in.TVALID
             axi_stream_out.TDATA.next = axi_stream_in.TDATA
-
-    @always(clock.posedge)
-    def TREADY_driver():
-        axi_stream_in.TREADY.next = True
 
     @always(clock.posedge)
     def model():
@@ -461,95 +673,128 @@ def axi_stream_buffer(
         transact_out = axi_stream_out.TREADY and axi_stream_out.TVALID
 
         if len(data_buffer) == 0:
-            if (transact_in and not transact_out) or (
+            if (transact_in and not transact_out and not
+                await_next_word_in) or (
                 transact_in and use_internal_values):
 
+                # There is no data in the buffer but the data has been read
+                # in and the output is not ahead so add it to the data_buffer
                 data_buffer.append(
                     (int(axi_stream_in.TDATA.val),
-                     bool(internal_input_TLAST.val)))
+                     bool(internal_input_TLAST.val),
+                     int(internal_input_TID.val),
+                     int(internal_input_TDEST.val)))
 
             elif transact_out and not transact_in and use_internal_values:
+                # No data in buffer and data has been read out so we should
+                # stop using the internal values (ie the values stored in the
+                # buffer
                 use_internal_values.next = False
 
+            if transact_out and not transact_in and not use_internal_values:
+                # There has been a transaction out but no transaction in so we
+                # need to wait for the input side to catch up
+                await_next_word_in.next = True
+
+            if await_next_word_in and transact_in:
+                # The input side has caught up with the output side so we can
+                # set await_next_word_in low
+                await_next_word_in.next = False
+
         elif len(data_buffer) > 0 and transact_in:
+            # If there is data in the buffer and a transaction in happens then
+            # add it to the data buffer
             data_buffer.append(
-                (int(axi_stream_in.TDATA.val), bool(internal_input_TLAST.val)))
+                (int(axi_stream_in.TDATA.val), bool(internal_input_TLAST.val),
+                 int(internal_input_TID.val), int(internal_input_TDEST.val)))
 
         # Data might have just been put into the buffer, so we always check it
         if len(data_buffer) > 0:
             if transact_out or (not transact_out and not use_internal_values):
-                TDATA, TLAST = data_buffer.popleft()
+                TDATA, TLAST, TID, TDEST = data_buffer.popleft()
                 internal_TDATA.next = TDATA
                 internal_TLAST.next = TLAST
+                internal_TID.next = TID
+                internal_TDEST.next = TDEST
                 internal_TVALID.next = True
                 use_internal_values.next = True
 
-    return_instances = [model, output_assignments, input_TLAST_assignment]
-
-    if not passive_sink_mode:
-        return_instances.append(TREADY_driver)
-
-    if use_output_TLAST:
-        return_instances.append(output_TLAST_assignment)
+    return_instances.extend([model, output_assignments])
 
     return return_instances
 
 @block
 def axi_master_playback(
-    clock, axi_interface, packets, incomplete_last_packet=False):
-    '''A convertible block that plays back the list of packets (themselves
-    lists of data values) over an AXI stream interface.
+    clock, axi_interface, signal_record, incomplete_last_packet=False):
+    '''A convertible block that plays back the signal_record over an AXI
+    stream interface.
 
     If ``incomplete_last_packet`` is set to True, the final packet in the
-    packets list will not trigger the ``TLAST`` to be asserted. This means
+    signal_record will not trigger the ``TLAST`` to be asserted. This means
     data streams for which ``TLAST`` is not meaningful can be modelled.
     '''
-    if sum(len(each) for each in packets) == 0:
+
+    if axi_interface._TID_width is not None:
+        if len(signal_record['TDATA']) != len(signal_record['TID']):
+            raise ValueError(
+                'The length of the TID signal_record must be equal to the '
+                'length of the TDATA signal_record')
+
+    if axi_interface._TDEST_width is not None:
+        if len(signal_record['TDATA']) != len(signal_record['TDEST']):
+            raise ValueError(
+                'The length of the TDEST signal_record must be equal to the '
+                'length of the TDATA signal_record')
+
+    use_TLAST = hasattr(axi_interface, 'TLAST')
+
+    if use_TLAST:
+        if len(signal_record['TDATA']) != len(signal_record['TLAST']):
+            raise ValueError(
+                'The length of the TLAST signal_record must be equal to the '
+                'length of the TDATA signal_record')
+
+    if len(signal_record['TDATA']) == 0:
         # We need a non-zero packet length to work around a myhdl conversion
-        # bug with empty lists. The following satisfies everything.
-        packets = [[None]]
+        # bug with empty lists. The following satisfies everything. We have
+        # already checked that these lists are the same length as TDATA so we
+        # know they are also empty.
+        signal_record['TDATA'] = [None]
+        signal_record['TVALID'] = [0]
+        signal_record['TID'] = [0]
+        signal_record['TDEST'] = [0]
+        signal_record['TLAST'] = [0]
 
-    # From the packets, we preload all the values that should be output.
-    # This is TDATA, TVALID and TLAST
-    TDATAs = tuple(val if val is not None else 0 for packet in packets
-                   for val in packet)
+    elif incomplete_last_packet:
+        # incomplete last packet is true so determine the index of the final
+        # TLAST.
+        last_valid_value_index = 0
+        for n, data_word in enumerate(reversed(signal_record['TDATA'])):
+            if data_word is not None:
+                last_valid_value_index = len(signal_record['TDATA']) - n - 1
+                break
 
-    TVALIDs = tuple(1 if val is not None else 0 for packet in packets
-                   for val in packet)
+        # Set the final TLAST to False
+        signal_record['TLAST'][last_valid_value_index] = 0
 
-    # To find TLAST, we need both the length of the packet and the length
-    # of the packet with the trailing Nones stripped away.
-    packet_lengths = [len(packet) for packet in packets]
-    None_stripped_packet_lengths = [
-        len(tuple(dropwhile(lambda x: x is None, reversed(packet)))) for
-        packet in packets]
+    # From the signal_record, we preload all the values that should be
+    # output. This is TDATA, TVALID, TID, TDEST and TLAST
+    TDATAs = tuple(
+        val if val is not None else 0 for val in signal_record['TDATA'])
 
-    TLASTs = [0] * len(TDATAs)
+    TVALIDs = tuple(
+        1 if val is not None else 0 for val in signal_record['TDATA'])
 
-    TLAST_vals = [1] * len(packet_lengths)
-    if incomplete_last_packet:
-        if len(TLAST_vals) > 0:
-            TLAST_vals[-1] = 0
+    TIDs = tuple(val for val in signal_record['TID'])
+    TDESTs = tuple(val for val in signal_record['TDEST'])
+    TLASTs = tuple(val for val in signal_record['TLAST'])
 
-    TLAST_offset = -1
-    for length, stripped_length, TLAST_val in zip(
-        packet_lengths, None_stripped_packet_lengths, TLAST_vals):
-
-        if length > 0:
-            TLASTs[TLAST_offset + stripped_length] = TLAST_val
-            TLAST_offset += length
-
-        else:
-            continue
-
-    # TLASTs should be a tuple
-    TLASTs = tuple(TLASTs)
     number_of_vals = len(TDATAs)
     value_index = Signal(intbv(0, min=0, max=number_of_vals + 1))
 
     internal_TVALID = Signal(False)
 
-    use_TLAST = hasattr(axi_interface, 'TLAST')
+    return_instances = []
 
     if use_TLAST:
 
@@ -563,8 +808,42 @@ def axi_master_playback(
                 if value_index < number_of_vals:
                     axi_interface.TLAST.next = TLASTs[value_index]
 
+        return_instances.append(playback_TLAST)
+
     else:
         playback_TLAST = None
+
+    if axi_interface._TID_width is not None:
+        @always(clock.posedge)
+        def playback_TID():
+            # Replicates the logic of playback_core in terms of when to
+            # playback the signals
+            if ((axi_interface.TREADY and internal_TVALID) or
+                not internal_TVALID):
+
+                if value_index < number_of_vals:
+                    axi_interface.TID.next = TIDs[value_index]
+
+        return_instances.append(playback_TID)
+
+    else:
+        playback_TID = None
+
+    if axi_interface._TDEST_width is not None:
+        @always(clock.posedge)
+        def playback_TDEST():
+            # Replicates the logic of playback_core in terms of when to
+            # playback the signals
+            if ((axi_interface.TREADY and internal_TVALID) or
+                not internal_TVALID):
+
+                if value_index < number_of_vals:
+                    axi_interface.TDEST.next = TDESTs[value_index]
+
+        return_instances.append(playback_TDEST)
+
+    else:
+        playback_TDEST = None
 
     @always(clock.posedge)
     def playback_core():
@@ -584,14 +863,11 @@ def axi_master_playback(
             else:
                 # The last output word
                 if (axi_interface.TREADY and internal_TVALID):
-                    internal_TVALID.next = False
-                    axi_interface.TVALID.next = False
+                    internal_TVALID.next = 0
+                    axi_interface.TVALID.next = 0
 
                 value_index.next = value_index
 
-    return_instances = [playback_core]
-
-    if use_TLAST:
-        return_instances.append(playback_TLAST)
+    return_instances.append(playback_core)
 
     return return_instances
