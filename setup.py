@@ -1,9 +1,9 @@
 import versioneer
-from distutils.core import setup
+from setuptools import setup, find_packages
 
 setup(
     name='Kea',
     version=versioneer.get_version(),
-    packages=['kea',],
+    packages=find_packages(),
     cmdclass=versioneer.get_cmdclass(),
 )
