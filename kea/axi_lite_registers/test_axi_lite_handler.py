@@ -839,6 +839,137 @@ class TestAxiLiteHandlerBehaviouralSimulation(KeaTestCase):
 
         self.assertEqual(dut_outputs, ref_outputs)
 
+    def test_successful_write_to_single_read_write_register(self):
+        ''' The axi_lite_handler should be able to write to the register when
+        a single read_write register is defined.
+        '''
+
+        # Create a new registers list and register type dict for a single
+        # read write register
+        register_list = [self.register_list[0]]
+        register_types = {register_list[0]: 'axi_read_write'}
+        registers = Registers(
+            register_list, register_types, register_width=self.data_width)
+
+        args = self.default_args
+        arg_types = self.default_arg_types
+
+        # Modify the args to take the registers created within this test
+        args['registers'] = registers
+        arg_types['registers'] = {register_list[0]: 'output'}
+
+        cycles = 4000
+
+        test_checks = {'test_run': False}
+
+        @block
+        def testbench(clock, axil_nreset, axi_lite_interface, registers):
+
+            axi_lite_bfm = AxiLiteMasterBFM()
+            master_bfm = axi_lite_bfm.model(clock, axil_nreset, axi_lite_interface)
+
+            add_write_transaction_prob = 0.05
+
+            t_check_state = enum(
+                'IDLE','AWAIT_TRANSACTION', 'CHECK_TRANSACTION')
+            check_state = Signal(t_check_state.IDLE)
+
+            test_data = {'address': 0,
+                         'address_received': False,
+                         'data': 0,
+                         'data_received': False,
+                         'write_response': None,}
+
+            # Create an expected_register_values dict which uses the names in
+            # the list of registers as keys.
+            expected_register_values = {
+                key: 0 for key in register_list}
+
+            @always(clock.posedge)
+            def stimulate_check():
+
+                # Check the register values every clock cycle.
+                for register_key in register_list:
+
+                    assert(expected_register_values[register_key]==
+                           getattr(registers, register_key))
+
+                if check_state == t_check_state.IDLE:
+                    if random.random() < add_write_transaction_prob:
+                        # At a random time set up an axi lite write
+                        # transaction
+                        test_data['address'] = 0
+                        test_data['data'] = random.randint(
+                                0, 2**self.data_width-1)
+
+                        # Add the write transaction to the queue.
+                        axi_lite_bfm.add_write_transaction(
+                            write_address=(
+                                self.addr_remap_ratio*test_data['address']),
+                            write_data=test_data['data'],
+                            write_strobes=None,
+                            write_protection=None,
+                            address_delay=random.randint(0, 15),
+                            data_delay=random.randint(0, 15),
+                            response_ready_delay=random.randint(10, 25))
+
+                        check_state.next = t_check_state.AWAIT_TRANSACTION
+
+                elif check_state == t_check_state.AWAIT_TRANSACTION:
+
+                    if (axi_lite_interface.AWVALID and
+                        axi_lite_interface.AWREADY):
+                        # Write address handshake has occurred.
+                        test_data['address_received'] = True
+
+                    if (axi_lite_interface.WVALID and
+                        axi_lite_interface.WREADY):
+                        # Write data handshake has occurred.
+                        test_data['data_received'] = True
+
+                    if (test_data['address_received'] and
+                        test_data['data_received']):
+                        # Both data and address received so update the
+                        # expected register value
+                        expected_register_values[
+                            register_list[test_data['address']]] = (
+                                test_data['data'])
+
+                    if (axi_lite_interface.BVALID and
+                        axi_lite_interface.BREADY):
+                        # Response has been received.
+                        check_state.next = t_check_state.CHECK_TRANSACTION
+
+                elif check_state == t_check_state.CHECK_TRANSACTION:
+                    try:
+                        # Try to get the response from the responses Queue.
+                        # Include a timeout to prevent the system hanging if
+                        # queue is empty.
+                        test_data['write_response'] = (
+                            axi_lite_bfm.write_responses.get(True, 3))
+                    except queue.Empty:
+                        raise AssertionError(
+                            'axi_lite_handler has failed to respond correctly')
+
+                    test_checks['test_run'] = True
+
+                    # Check that the write response is not an error.
+                    assert(test_data['write_response']['wr_resp']==0)
+
+                    test_data['address_received'] = False
+                    test_data['data_received'] = False
+
+                    check_state.next = t_check_state.IDLE
+
+            return stimulate_check, master_bfm
+
+        dut_outputs, ref_outputs = self.cosimulate(
+            cycles, axi_lite_handler, axi_lite_handler, args, arg_types,
+            custom_sources=[(testbench, (), args)])
+
+        assert(test_checks['test_run'])
+
+        self.assertEqual(dut_outputs, ref_outputs)
 
     def test_successful_write_to_write_only_register(self):
         ''' On receipt of an axi write to an axi write-only register the
@@ -996,6 +1127,167 @@ class TestAxiLiteHandlerBehaviouralSimulation(KeaTestCase):
 
         self.assertEqual(dut_outputs, ref_outputs)
 
+    def test_successful_write_to_single_write_only_register(self):
+        ''' The axi_lite_handler should be able to write to the register when
+        a single write_only register is defined.
+        '''
+
+        # Create a new registers list and register type dict for a single
+        # read write register
+        register_list = [self.register_list[0]]
+        register_types = {register_list[0]: 'axi_write_only',}
+        registers = Registers(
+            register_list, register_types, register_width=self.data_width)
+
+        args = self.default_args
+        arg_types = self.default_arg_types
+
+        # Modify the args to take the registers created within this test
+        args['registers'] = registers
+        arg_types['registers'] = {register_list[0]: 'output',}
+
+        cycles = 4000
+
+        test_checks = {'test_run': False}
+
+        @block
+        def testbench(clock, axil_nreset, axi_lite_interface, registers):
+
+            axi_lite_bfm = AxiLiteMasterBFM()
+            master_bfm = axi_lite_bfm.model(clock, axil_nreset, axi_lite_interface)
+
+            add_write_transaction_prob = 0.05
+
+            t_check_state = enum(
+                'IDLE','AWAIT_TRANSACTION', 'AWAIT_RESPONSE',
+                'CHECK_TRANSACTION')
+            check_state = Signal(t_check_state.IDLE)
+
+            test_data = {'address': 0,
+                         'address_received': False,
+                         'data': 0,
+                         'data_received': False,
+                         'write_response': None,}
+
+            # Create an expected_register_values dict which uses the names in
+            # the list of registers as keys.
+            expected_register_values = {
+                key: 0 for key in register_list}
+
+            # Set up a valid start value (for the case when we re-use the
+            # previous value)
+            test_data['address'] = 0
+            test_data['data'] = random.randint(0, 2**self.data_width-1)
+
+            @always(clock.posedge)
+            def stimulate_check():
+
+                # Check the register values every clock cycle.
+                for register_key in register_list:
+
+                    assert(expected_register_values[register_key] ==
+                           getattr(registers, register_key))
+
+                # Now zero all the expected values before the next check
+                # (since the register is only set for a cycle)
+
+                for key in expected_register_values:
+                    expected_register_values[key] = 0
+
+                if check_state == t_check_state.IDLE:
+                    if random.random() < add_write_transaction_prob:
+
+                        if random.random() < 0.5:
+                            # About half the time we setup a new address and
+                            # data
+                            test_data['address'] = 0
+                            test_data['data'] = random.randint(
+                                0, 2**self.data_width-1)
+                        else:
+                            # The rest of the time we use the previous values
+                            pass
+
+                        # Add the write transaction to the queue.
+                        axi_lite_bfm.add_write_transaction(
+                            write_address=(
+                                self.addr_remap_ratio*test_data['address']),
+                            write_data=test_data['data'],
+                            write_strobes=None,
+                            write_protection=None,
+                            address_delay=random.randint(0, 15),
+                            data_delay=random.randint(0, 15),
+                            response_ready_delay=random.randint(10, 25))
+
+                        check_state.next = t_check_state.AWAIT_TRANSACTION
+
+                elif check_state == t_check_state.AWAIT_TRANSACTION:
+
+                    if (axi_lite_interface.AWVALID and
+                        axi_lite_interface.AWREADY):
+                        # Write address handshake has occurred.
+                        test_data['address_received'] = True
+
+                    if (axi_lite_interface.WVALID and
+                        axi_lite_interface.WREADY):
+                        # Write data handshake has occurred.
+                        test_data['data_received'] = True
+
+                    if (test_data['address_received'] and
+                        test_data['data_received']):
+                        # Both data and address received so update the
+                        # expected register value
+                        expected_register_values[
+                            register_list[test_data['address']]] = (
+                                test_data['data'])
+
+                        if (axi_lite_interface.BVALID and
+                            axi_lite_interface.BREADY):
+                            # Response has been received.
+                            check_state.next = t_check_state.CHECK_TRANSACTION
+
+                        else:
+                            check_state.next = t_check_state.AWAIT_RESPONSE
+
+                elif check_state == t_check_state.AWAIT_RESPONSE:
+                    # In this state, we don't write to the expected value
+                    # at all
+                    if (axi_lite_interface.BVALID and
+                        axi_lite_interface.BREADY):
+                        # Response has been received.
+                        check_state.next = t_check_state.CHECK_TRANSACTION
+
+                elif check_state == t_check_state.CHECK_TRANSACTION:
+                    try:
+                        # Try to get the response from the responses Queue.
+                        # Include a timeout to prevent the system hanging if
+                        # queue is empty.
+                        test_data['write_response'] = (
+                            axi_lite_bfm.write_responses.get(True, 3))
+                    except queue.Empty:
+                        raise AssertionError(
+                            'axi_lite_handler has failed to respond correctly')
+
+                    test_checks['test_run'] = True
+
+                    # Check that the write response is not an error.
+                    assert(test_data['write_response']['wr_resp']==0)
+
+                    test_data['address_received'] = False
+                    test_data['data_received'] = False
+
+                    check_state.next = t_check_state.IDLE
+
+            return stimulate_check, master_bfm
+
+        dut_outputs, ref_outputs = self.cosimulate(
+            cycles, axi_lite_handler, axi_lite_handler, args, arg_types,
+            custom_sources=[(testbench, (), args)])
+
+        assert(test_checks['test_run'])
+
+        self.assertEqual(dut_outputs, ref_outputs)
+
+
     def test_successful_read(self):
         ''' On receipt of an axi read from an axi readable register the
         axi_lite_handler should send the data from that register.
@@ -1088,6 +1380,111 @@ class TestAxiLiteHandlerBehaviouralSimulation(KeaTestCase):
         assert(test_checks['test_run'])
 
         self.assertEqual(dut_outputs, ref_outputs)
+
+    def test_successful_read_single_register(self):
+        ''' The axi_lite_handler should be able to read from the register when
+        a single read_only register is defined.
+        '''
+
+        # Create a new registers list and register type dict for a single
+        # read write register
+        register_list = [self.register_list[0],]
+        register_types = {register_list[0]: 'axi_read_only',}
+        registers = Registers(
+            register_list, register_types, register_width=self.data_width)
+
+        args = self.default_args
+        arg_types = self.default_arg_types
+
+        # Modify the args to take the registers created within this test
+        args['registers'] = registers
+        arg_types['registers'] = {register_list[0]: 'custom',}
+
+        cycles = 4000
+
+        test_checks = {'test_run': False}
+
+        @block
+        def testbench(clock, axil_nreset, axi_lite_interface, registers):
+
+            axi_lite_bfm = AxiLiteMasterBFM()
+            master_bfm = axi_lite_bfm.model(
+                self.clock, self.axil_nreset, self.axi_lite_interface)
+
+            add_read_transaction_prob = 0.05
+
+            test_data = {'address': 0,
+                         'expected_data': 0,
+                         'read_response': None,
+                         'signal_to_update': None,}
+
+            t_check_state = enum(
+                'IDLE', 'AWAIT_RESPONSE', 'CHECK_TRANSACTION')
+            check_state = Signal(t_check_state.IDLE)
+
+            @always(clock.posedge)
+            def stimulate_check():
+
+                if check_state == t_check_state.IDLE:
+                    if random.random() < add_read_transaction_prob:
+                        # At random times set up an axi lite read transaction
+                        test_data['address'] = 0
+                        test_data['expected_data'] = random.randint(
+                                0, 2**self.data_width-1)
+
+                        # Set the register value.
+                        test_data['signal_to_update'] = (
+                            getattr(registers,
+                                    register_list[test_data['address']]))
+                        test_data['signal_to_update'].next = (
+                            test_data['expected_data'])
+
+                        # Add the read transaction to the queue.
+                        axi_lite_bfm.add_read_transaction(
+                            read_address=(
+                                self.addr_remap_ratio*test_data['address']),
+                            read_protection=None,
+                            address_delay=random.randint(0, 15),
+                            data_delay=random.randint(0, 15))
+
+                        check_state.next = t_check_state.AWAIT_RESPONSE
+
+                elif check_state == t_check_state.AWAIT_RESPONSE:
+                    if (axi_lite_interface.RVALID and
+                        axi_lite_interface.RREADY):
+                        # Response has been received.
+                        check_state.next = t_check_state.CHECK_TRANSACTION
+
+                elif check_state == t_check_state.CHECK_TRANSACTION:
+                    try:
+                        # Try to get the response from the responses Queue.
+                        # Include a timeout to prevent the system hanging if
+                        # queue is empty.
+                        test_data['read_response'] = (
+                            axi_lite_bfm.read_responses.get(True, 3))
+                    except queue.Empty:
+                        raise AssertionError(
+                            'axi_lite_handler has failed to respond correctly')
+
+                    test_checks['test_run'] = True
+
+                    # Check that the read responds with the correct data.
+                    assert(test_data['read_response']['rd_data']==
+                           test_data['expected_data'])
+                    # Check that the read response is not an error.
+                    assert(test_data['read_response']['rd_resp']==0)
+
+                    check_state.next = t_check_state.IDLE
+
+            return stimulate_check, master_bfm
+
+        dut_outputs, ref_outputs = self.cosimulate(
+            cycles, axi_lite_handler, axi_lite_handler, args, arg_types,
+            custom_sources=[(testbench, (), args)])
+
+        assert(test_checks['test_run'])
+
+        self.assertTrue(dut_outputs == ref_outputs)
 
     def test_read_write_registers(self):
         ''' The read write registers should store the value on a write and
@@ -1302,6 +1699,176 @@ class TestAxiLiteHandlerBehaviouralSimulation(KeaTestCase):
             dut_outputs['axil_nreset'],
             ref_outputs['axil_nreset'])
 
+    def test_write_to_single_invalid_register(self):
+        ''' The axi_lite_handler should respond with a SLVERR if the there is
+        an attempt to write to an invalid register when when a single
+        write_only register is defined.
+        '''
+
+        # Create a new registers list and register type dict for a single
+        # read write register
+        register_list = [self.register_list[0]]
+        register_types = {register_list[0]: 'axi_read_write',}
+        registers = Registers(
+            register_list, register_types, register_width=self.data_width)
+
+        args = self.default_args
+        arg_types = self.default_arg_types
+
+        # Modify the args to take the registers created within this test
+        args['registers'] = registers
+        arg_types['registers'] = {register_list[0]: 'output',}
+
+        cycles = 4000
+
+        test_checks = {'test_run': False}
+
+        @block
+        def testbench(clock, axil_nreset, axi_lite_interface, registers):
+
+            axi_lite_bfm = AxiLiteMasterBFM()
+            master_bfm = axi_lite_bfm.model(clock, axil_nreset, axi_lite_interface)
+
+            add_write_transaction_prob = 0.1
+
+            t_check_state = enum(
+                'IDLE','AWAIT_TRANSACTION', 'CHECK_TRANSACTION')
+            check_state = Signal(t_check_state.IDLE)
+
+            test_data = {'address': 0,
+                         'invalid_address': False,
+                         'address_received': False,
+                         'data': 0,
+                         'data_received': False,
+                         'write_response': None,
+                         'last_write_invalid': False}
+
+            # Create an expected_register_values dict which uses the names in
+            # the list of registers as keys.
+            expected_register_values = {
+                key: 0 for key in register_list}
+
+            expected_values = {}
+
+            expected_values.update(
+                {key: 0 for key in register_list})
+
+            @always(clock.posedge)
+            def stimulate_check():
+
+                if test_data['last_write_invalid']:
+                    for key in expected_values:
+                        assert(getattr(registers, key) ==
+                               expected_values[key])
+
+                    test_data['last_write_invalid'] = False
+                else:
+                    # Otherwise we just keep the expected values tracking
+                    # the registers
+                    expected_values.update(
+                        {key: getattr(registers, key) for
+                         key in register_list})
+
+                if check_state == t_check_state.IDLE:
+                    if random.random() < add_write_transaction_prob:
+                        # At a random time set up an axi lite write
+                        # transaction
+
+                        # 50% of the time select an invalid address
+                        if random.random() < 0.5:
+                            # The only valid address in this case is 0 so
+                            # pick another value
+                            test_data['address'] = random.randrange(
+                                1, 2**self.addr_width/self.addr_remap_ratio)
+
+                            test_data['invalid_address'] = True
+                            test_data['last_write_invalid'] = True
+
+                        else:
+                            test_data['address'] = 0
+                            test_data['invalid_address'] = False
+
+                        test_data['data'] = random.randint(
+                                0, 2**self.data_width-1)
+
+                        # Add the write transaction to the queue.
+                        axi_lite_bfm.add_write_transaction(
+                            write_address=(
+                                self.addr_remap_ratio*test_data['address']),
+                            write_data=test_data['data'],
+                            write_strobes=None,
+                            write_protection=None,
+                            address_delay=random.randint(0, 15),
+                            data_delay=random.randint(0, 15),
+                            response_ready_delay=random.randint(10, 25))
+
+                        check_state.next = t_check_state.AWAIT_TRANSACTION
+
+                elif check_state == t_check_state.AWAIT_TRANSACTION:
+
+                    if (axi_lite_interface.AWVALID and
+                        axi_lite_interface.AWREADY):
+                        # Write address handshake has occurred.
+                        test_data['address_received'] = True
+
+                    if (axi_lite_interface.WVALID and
+                        axi_lite_interface.WREADY):
+                        # Write data handshake has occurred.
+                        test_data['data_received'] = True
+
+                    if (test_data['address_received'] and
+                        test_data['data_received']):
+                        # Both data and address received so update the
+                        # expected register value
+                        pass
+
+                    if (axi_lite_interface.BVALID and
+                        axi_lite_interface.BREADY):
+
+                        # Quick sanity check that a transaction has happened.
+                        assert (test_data['address_received'] and
+                                test_data['data_received'])
+
+                        # Response has been received.
+                        check_state.next = t_check_state.CHECK_TRANSACTION
+
+                elif check_state == t_check_state.CHECK_TRANSACTION:
+                    try:
+                        # Try to get the response from the responses Queue.
+                        # Include a timeout to prevent the system hanging if
+                        # queue is empty.
+                        test_data['write_response'] = (
+                            axi_lite_bfm.write_responses.get(True, 3))
+                    except queue.Empty:
+                        raise AssertionError(
+                            'axi_lite_handler has failed to respond correctly')
+
+                    test_checks['test_run'] = True
+
+                    if test_data['invalid_address']:
+                        # Check that the write response is not an error.
+                        assert(test_data['write_response']['wr_resp']
+                               == axi_lite.SLVERR)
+
+                    # The queue should be empty now
+                    assert axi_lite_bfm.write_responses.empty()
+
+                    test_data['address_received'] = False
+                    test_data['data_received'] = False
+                    test_data['invalid_address'] = False
+
+                    check_state.next = t_check_state.IDLE
+
+            return stimulate_check, master_bfm
+
+        dut_outputs, ref_outputs = self.cosimulate(
+            cycles, axi_lite_handler, axi_lite_handler, args, arg_types,
+            custom_sources=[(testbench, (), args)])
+
+        assert(test_checks['test_run'])
+
+        self.assertEqual(dut_outputs, ref_outputs)
+
     def test_write_to_invalid_register(self):
         ''' If a write is requested to a register that is not defined,
         the transaction should complete but the response should be
@@ -1468,7 +2035,6 @@ class TestAxiLiteHandlerBehaviouralSimulation(KeaTestCase):
 
         self.assertEqual(dut_outputs, ref_outputs)
 
-
     def test_read_from_invalid_register(self):
         ''' If a read is requested from a register that is not defined,
         the transaction should complete but the data should be
@@ -1568,6 +2134,117 @@ class TestAxiLiteHandlerBehaviouralSimulation(KeaTestCase):
 
         self.assertEqual(dut_outputs, ref_outputs)
 
+    def test_read_from_single_invalid_register(self):
+        ''' If a read is requested from a register that is not defined,
+        the transaction should complete but the data should be
+        returned as zero and the response should be SLVERR (0b10).
+
+        This should be the case when only a single register is defined
+        '''
+
+        # Create a new registers list and register type dict for a single
+        # read write register
+        register_list = [self.register_list[0],]
+        register_types = {register_list[0]: 'axi_read_only',}
+        registers = Registers(
+            register_list, register_types, register_width=self.data_width)
+
+        args = self.default_args
+        arg_types = self.default_arg_types
+
+        # Modify the args to take the registers created within this test
+        args['registers'] = registers
+        arg_types['registers'] = {register_list[0]: 'custom',}
+
+        cycles = 4000
+
+        test_checks = {'test_run': False}
+
+        @block
+        def testbench(clock, axil_nreset, axi_lite_interface, registers):
+
+            axi_lite_bfm = AxiLiteMasterBFM()
+            master_bfm = axi_lite_bfm.model(
+                self.clock, self.axil_nreset, self.axi_lite_interface)
+
+            add_read_transaction_prob = 0.1
+
+            test_data = {'address': 0,
+                         'expected_data': 0,
+                         'read_response': None,
+                         'signal_to_update': None,}
+
+            t_check_state = enum(
+                'IDLE', 'AWAIT_RESPONSE', 'CHECK_TRANSACTION')
+            check_state = Signal(t_check_state.IDLE)
+
+            @always(clock.posedge)
+            def stimulate_check():
+
+                if check_state == t_check_state.IDLE:
+                    if random.random() < add_read_transaction_prob:
+
+                        # 50% of the time select an invalid address
+                        if random.random() < 0.5:
+                            test_data['address'] = random.randrange(
+                                1, 2**self.addr_width/self.addr_remap_ratio)
+                            test_data['invalid_address'] = True
+
+                        else:
+                            test_data['address'] = 0
+
+                            test_data['invalid_address'] = False
+
+                        # Add the read transaction to the queue.
+                        axi_lite_bfm.add_read_transaction(
+                            read_address=(
+                                self.addr_remap_ratio*test_data['address']),
+                            read_protection=None,
+                            address_delay=random.randint(0, 15),
+                            data_delay=random.randint(0, 15))
+
+                        check_state.next = t_check_state.AWAIT_RESPONSE
+
+                elif check_state == t_check_state.AWAIT_RESPONSE:
+                    if (axi_lite_interface.RVALID and
+                        axi_lite_interface.RREADY):
+                        # Response has been received.
+                        check_state.next = t_check_state.CHECK_TRANSACTION
+
+                elif check_state == t_check_state.CHECK_TRANSACTION:
+                    try:
+                        # Try to get the response from the responses Queue.
+                        # Include a timeout to prevent the system hanging if
+                        # queue is empty.
+                        test_data['read_response'] = (
+                            axi_lite_bfm.read_responses.get(True, 3))
+                    except queue.Empty:
+                        raise AssertionError(
+                            'axi_lite_handler has failed to respond correctly')
+
+                    test_checks['test_run'] = True
+
+                    if test_data['invalid_address']:
+                        # Check that the write response is not an error.
+                        assert(test_data['read_response']['rd_resp']
+                               == axi_lite.SLVERR)
+
+                    # The queue should be empty now
+                    assert axi_lite_bfm.write_responses.empty()
+
+                    test_data['invalid_address'] = False
+
+                    check_state.next = t_check_state.IDLE
+
+            return stimulate_check, master_bfm
+
+        dut_outputs, ref_outputs = self.cosimulate(
+            cycles, axi_lite_handler, axi_lite_handler, args, arg_types,
+            custom_sources=[(testbench, (), args)])
+
+        assert(test_checks['test_run'])
+
+        self.assertEqual(dut_outputs, ref_outputs)
 
     def test_initial_values(self):
         ''' It should be possible to set initial values to the register

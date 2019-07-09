@@ -152,20 +152,43 @@ def axi_lite_handler(
         word_read_address = (
             Signal(intbv(0)[required_addr_width-byte_to_word_shift:]))
 
-    @always_comb
-    def address_remap():
-        '''
-        Need to remap the address signals to remove the byte indexing which
-        comes from software.
+    if required_addr_width==byte_to_word_shift:
+        @always_comb
+        def address_remap():
+            '''
+            Need to remap the address signals to remove the byte indexing which
+            comes from software.
 
-        We also at this point check that the address is valid, deasserting
-        valid_read_address or valid_write_address flag as necessary.
-        '''
-        if required_addr_width==byte_to_word_shift:
+            We also at this point check that the address is valid, deasserting
+            valid_read_address or valid_write_address flag as necessary.
+            '''
+
             # There is only one register so address should always be zero.
             word_write_address.next = 0
             word_read_address.next = 0
-        else:
+
+            # Only write to the register if the address is zero
+            if axi_lite_interface.AWADDR == 0:
+                valid_write_address.next = True
+            else:
+                valid_write_address.next = False
+
+            # Only read from the register if the address is zero
+            if axi_lite_interface.ARADDR == 0:
+                valid_read_address.next = True
+            else:
+                valid_read_address.next = False
+
+    else:
+        @always_comb
+        def address_remap():
+            '''
+            Need to remap the address signals to remove the byte indexing
+            which comes from software.
+
+            We also at this point check that the address is valid, deasserting
+            valid_read_address or valid_write_address flag as necessary.
+            '''
 
             if axi_lite_interface.AWADDR[
                 required_addr_width:byte_to_word_shift] < n_registers:
