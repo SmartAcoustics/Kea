@@ -188,8 +188,8 @@ class AxiStreamMasterBFM(object):
         else:
             internal_TLAST = Signal(False)
 
-        if interface._TDEST_width is not None:
-            internal_TDEST = Signal(intbv(0)[interface._TDEST_width:])
+        if interface.TDEST_width is not None:
+            internal_TDEST = Signal(intbv(0)[interface.TDEST_width:])
 
             @always_comb
             def assign_TDEST():
@@ -200,8 +200,8 @@ class AxiStreamMasterBFM(object):
         else:
             internal_TDEST = Signal(intbv(0)[4:])
 
-        if interface._TID_width is not None:
-            internal_TID = Signal(intbv(0)[interface._TID_width:])
+        if interface.TID_width is not None:
+            internal_TID = Signal(intbv(0)[interface.TID_width:])
 
             @always_comb
             def assign_TID():
@@ -413,9 +413,9 @@ class AxiStreamSlaveBFM(object):
         else:
             internal_TLAST = Signal(False)
 
-        if interface._TDEST_width is not None:
+        if interface.TDEST_width is not None:
             internal_TDEST = (
-                Signal(intbv(interface.TDEST.val)[interface._TDEST_width:]))
+                Signal(intbv(interface.TDEST.val)[interface.TDEST_width:]))
 
             @always_comb
             def assign_TDEST():
@@ -426,9 +426,9 @@ class AxiStreamSlaveBFM(object):
         else:
             internal_TDEST = Signal(intbv(0)[4:])
 
-        if interface._TID_width is not None:
+        if interface.TID_width is not None:
             internal_TID = (
-                Signal(intbv(interface.TID.val)[interface._TID_width:]))
+                Signal(intbv(interface.TID.val)[interface.TID_width:]))
 
             @always_comb
             def assign_TID():
@@ -524,30 +524,30 @@ def axi_stream_buffer(
     transactions and buffers them for ``axi_stream_out``.
     '''
 
-    if ((axi_stream_in._TID_width is not None) and
-        (axi_stream_out._TID_width is None)):
+    if ((axi_stream_in.TID_width is not None) and
+        (axi_stream_out.TID_width is None)):
         raise ValueError(
             'There is a TID on the input and so there must be a TID on the '
             'output')
 
-    if ((axi_stream_in._TDEST_width is not None) and
-        (axi_stream_out._TDEST_width is None)):
+    if ((axi_stream_in.TDEST_width is not None) and
+        (axi_stream_out.TDEST_width is None)):
         raise ValueError(
             'There is a TDEST on the input and so there must be a TDEST on '
             'the output')
 
-    if ((axi_stream_in._TID_width is not None) and
-        (axi_stream_out._TID_width is not None)):
+    if ((axi_stream_in.TID_width is not None) and
+        (axi_stream_out.TID_width is not None)):
 
-        if axi_stream_in._TID_width > axi_stream_out._TID_width:
+        if axi_stream_in.TID_width > axi_stream_out.TID_width:
             raise ValueError(
                 'TID on the output must be as wide or wider than TID on the '
                 'input')
 
-    if ((axi_stream_in._TDEST_width is not None) and
-        (axi_stream_out._TDEST_width is not None)):
+    if ((axi_stream_in.TDEST_width is not None) and
+        (axi_stream_out.TDEST_width is not None)):
 
-        if axi_stream_in._TDEST_width > axi_stream_out._TDEST_width:
+        if axi_stream_in.TDEST_width > axi_stream_out.TDEST_width:
             raise ValueError(
                 'TDEST on the output must be as wide or wider than TDEST on '
                 'the input')
@@ -586,12 +586,12 @@ def axi_stream_buffer(
 
         return_instances.append(output_TLAST_assignment)
 
-    if axi_stream_in._TID_width is not None:
+    if axi_stream_in.TID_width is not None:
 
         internal_input_TID = (
-            Signal(intbv(axi_stream_in.TID.val)[axi_stream_in._TID_width:]))
+            Signal(intbv(axi_stream_in.TID.val)[axi_stream_in.TID_width:]))
         internal_TID = (
-            Signal(intbv(axi_stream_in.TID.val)[axi_stream_in._TID_width:]))
+            Signal(intbv(axi_stream_in.TID.val)[axi_stream_in.TID_width:]))
 
         @always_comb
         def input_TID_assignment():
@@ -603,7 +603,7 @@ def axi_stream_buffer(
         internal_input_TID = Signal(intbv(0)[4:])
         internal_TID = Signal(intbv(0)[4:])
 
-    if axi_stream_out._TID_width is not None:
+    if axi_stream_out.TID_width is not None:
 
         @always_comb
         def output_TID_assignment():
@@ -614,14 +614,14 @@ def axi_stream_buffer(
 
         return_instances.append(output_TID_assignment)
 
-    if axi_stream_in._TDEST_width is not None:
+    if axi_stream_in.TDEST_width is not None:
 
         internal_input_TDEST = (
             Signal(intbv(axi_stream_in.TDEST.val)[
-                axi_stream_in._TDEST_width:]))
+                axi_stream_in.TDEST_width:]))
         internal_TDEST = (
             Signal(intbv(axi_stream_in.TDEST.val)[
-                axi_stream_in._TDEST_width:]))
+                axi_stream_in.TDEST_width:]))
 
         @always_comb
         def input_TDEST_assignment():
@@ -633,7 +633,7 @@ def axi_stream_buffer(
         internal_input_TDEST = Signal(intbv(0)[4:])
         internal_TDEST = Signal(intbv(0)[4:])
 
-    if axi_stream_out._TDEST_width is not None:
+    if axi_stream_out.TDEST_width is not None:
 
         @always_comb
         def output_TDEST_assignment():
@@ -734,13 +734,13 @@ def axi_master_playback(
     data streams for which ``TLAST`` is not meaningful can be modelled.
     '''
 
-    if axi_interface._TID_width is not None:
+    if axi_interface.TID_width is not None:
         if len(signal_record['TDATA']) != len(signal_record['TID']):
             raise ValueError(
                 'The length of the TID signal_record must be equal to the '
                 'length of the TDATA signal_record')
 
-    if axi_interface._TDEST_width is not None:
+    if axi_interface.TDEST_width is not None:
         if len(signal_record['TDATA']) != len(signal_record['TDEST']):
             raise ValueError(
                 'The length of the TDEST signal_record must be equal to the '
@@ -813,7 +813,7 @@ def axi_master_playback(
     else:
         playback_TLAST = None
 
-    if axi_interface._TID_width is not None:
+    if axi_interface.TID_width is not None:
         @always(clock.posedge)
         def playback_TID():
             # Replicates the logic of playback_core in terms of when to
@@ -829,7 +829,7 @@ def axi_master_playback(
     else:
         playback_TID = None
 
-    if axi_interface._TDEST_width is not None:
+    if axi_interface.TDEST_width is not None:
         @always(clock.posedge)
         def playback_TDEST():
             # Replicates the logic of playback_core in terms of when to
