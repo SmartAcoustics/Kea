@@ -3789,9 +3789,8 @@ class TestAxiMasterPlaybackBlockMinimal(TestCase):
              'length of the TDATA signal_record'),
             axi_master_playback, self.clock, axi_stream_in, signal_record)
 
-    def test_block_converts(self):
-        '''The axi_master_playback block should convert to both VHDL and
-        Verilog.
+    def test_block_converts_to_vhdl(self):
+        '''The axi_master_playback block should convert to VHDL
         '''
         max_n_streams = 10
         max_packet_length = 20
@@ -3819,7 +3818,34 @@ class TestAxiMasterPlaybackBlockMinimal(TestCase):
             instance.convert('VHDL', path=tmp_dir)
             self.assertTrue(os.path.exists(
                 os.path.join(tmp_dir, 'axi_master_playback.vhd')))
+        finally:
+            shutil.rmtree(tmp_dir)
 
+    def test_block_converts_to_verilog(self):
+        '''The axi_master_playback block should convert to Verilog.
+        '''
+        max_n_streams = 10
+        max_packet_length = 20
+        max_n_packets_per_stream = 8
+        max_data_value = self.max_rand_val
+        max_id_value = 2**self.axi_interface._TID_width
+        max_dest_value = 2**self.axi_interface._TDEST_width
+
+        signal_record, trimmed_packet_list = gen_random_signal_record(
+            max_n_streams, max_packet_length, max_n_packets_per_stream,
+            max_data_value, max_id_value, max_dest_value, include_nones=True)
+
+        n_words_expected = 0
+
+        for key in trimmed_packet_list.keys():
+            for packet in trimmed_packet_list[key]:
+                # Count the number of expected words
+                n_words_expected += len(packet)
+
+        self.args['signal_record'] = signal_record
+
+        tmp_dir = tempfile.mkdtemp()
+        try:
             instance = axi_master_playback(**self.args)
             instance.convert('Verilog', path=tmp_dir)
             self.assertTrue(os.path.exists(

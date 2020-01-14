@@ -7,6 +7,7 @@ import copy
 
 from ._registers import Registers
 from ._axi_lite_handler import axi_lite_handler
+from .test_registers import create_bitfields_config
 from kea.axi import axi_lite, AxiLiteInterface, AxiLiteMasterBFM
 from kea.test_utils.base_test import (
     KeaTestCase, KeaVivadoVHDLTestCase, KeaVivadoVerilogTestCase)
@@ -34,157 +35,6 @@ class TestAxiLiteHandlerInterfaceSimulation(KeaTestCase):
         self.clock = Signal(bool(0))
         self.axil_nreset = Signal(bool(0))
 
-    def test_invalid_register_types(self):
-        ''' The system should error if the register_types dict includes a key
-        which does not correspond to any name in the register_list
-        '''
-
-        n_registers = 5
-        register_list = []
-
-        # Create a list of registers with random names of 5 character length.
-        for i in range(n_registers):
-            register_list.append(
-                ''.join(random.choice(string.ascii_lowercase)
-                        for i in range(5)))
-
-        # Create a register_types dict which contains a key which cannot be in
-        # the list of registers. I have made sure it cannot be in the list of
-        # registers by setting the length to 10 characters.
-        register_types = {
-            ''.join(random.choice(string.ascii_lowercase)
-                    for i in range(10)): (
-                random.choice(self.available_register_types))}
-
-        # Check that the system errors when register_types contains an invalid
-        # key.
-        self.assertRaisesRegex(ValueError,
-                               'Invalid register in register_types',
-                               Registers, register_list, register_types)
-
-    def test_default_register_types(self):
-        ''' The system should treat any registers which do not have an entry
-        in the register_types dict as axi_read_write.
-        '''
-
-        n_registers = 20
-        register_list = []
-
-        # Create a list of registers with random names of 5 character length.
-        for i in range(n_registers):
-            register_list.append(
-                ''.join(random.choice(string.ascii_lowercase)
-                        for i in range(5)))
-
-        # Create a register_types dict which uses a random number of the names
-        # in the list of registers as keys.
-        register_types = {key: random.choice(
-            self.available_register_types) for key in register_list if (
-                random.random() < 0.25)}
-
-        # Create the registers
-        registers = Registers(register_list, register_types)
-
-        # Check that any registers which don't appear in the register types
-        # list are set to the default axi_read_write. All others should be the
-        # type specified in the register_types.
-        for name in register_list:
-            if name not in register_types:
-                assert(registers.register_types[name]=='axi_read_write')
-            else:
-                assert(registers.register_types[name]==register_types[name])
-
-    def test_rw_initial_values_argument(self):
-        ''' If the initial_values argument is not None, it should be a dict
-        that provides optional initial values to read-write registers.
-
-        If a RW register is not present in the initial_values dict, it
-        should default to 0.
-
-        If a RO or WO register is included in the initial_values dict, a
-        ``ValueError`` should be raised.
-        '''
-
-        n_registers = 30
-        register_list = []
-
-        # Create a list of registers with random names of 5 character length.
-        for i in range(n_registers):
-            register_list.append(
-                ''.join(random.choice(string.ascii_lowercase)
-                        for i in range(5)))
-
-
-        # Create a register_types dict which uses a random number of the names
-        # in the list of registers as keys.
-        register_types = {key: random.choice(
-            self.available_register_types) for key in register_list if (
-                random.random() < 0.5)}
-
-        rw_registers = []
-        non_rw_registers = []
-
-        for key in register_list:
-            if key in register_types:
-                if register_types[key] == 'axi_read_write':
-                    rw_registers.append(key)
-                else:
-                    non_rw_registers.append(key)
-
-            else:
-                # Also read-write
-                rw_registers.append(key)
-
-        initial_values = {
-            key: random.randrange(0xFFFFFFFF) for key in rw_registers if (
-                random.random() < 0.5)}
-
-        registers = Registers(
-            register_list, register_types, initial_values=initial_values)
-
-        for key in rw_registers:
-            if key in initial_values:
-                self.assertEqual(getattr(registers, key), initial_values[key])
-
-            else:
-                self.assertEqual(getattr(registers, key), 0)
-
-        # Force one read- or write-only
-        invalid_type_reg = random.choice(register_list)
-        register_types[invalid_type_reg] = random.choice(
-            ['axi_read_only', 'axi_write_only'])
-
-        invalid_initial_values = initial_values.copy()
-        invalid_initial_values[invalid_type_reg] = 20
-
-        self.assertRaisesRegex(ValueError,
-                               ('Only read-write registers can take '
-                                'initial values'),
-                               Registers, register_list, register_types,
-                               initial_values=invalid_initial_values)
-
-
-
-    def test_no_register_types(self):
-        ''' The system should handle a lack of register types dict gracefully
-         and return all registers in the register list as axi read write.
-        '''
-
-        n_registers = 20
-        register_list = []
-
-        # Create a list of registers with random names of 5 character length.
-        for i in range(n_registers):
-            register_list.append(
-                ''.join(random.choice(string.ascii_lowercase)
-                        for i in range(5)))
-
-        # Create the registers without passing a dict of register types
-        registers = Registers(register_list)
-
-        # All registers should be set to axi_read_write
-        for name in register_list:
-            assert(registers.register_types[name]=='axi_read_write')
 
     def test_single_register(self):
         ''' The system should create a single register.
@@ -488,6 +338,12 @@ class TestAxiLiteHandlerBehaviouralSimulation(KeaTestCase):
 
     def setUp(self):
 
+        # FIXME
+        seed = random.randrange(2**32)
+        seed = 779019085
+        random.seed(seed)
+        print(seed)
+
         self.available_register_types = [
             'axi_read_write', 'axi_write_only', 'axi_read_only']
 
@@ -503,7 +359,9 @@ class TestAxiLiteHandlerBehaviouralSimulation(KeaTestCase):
 
         byte_to_word_shift = int(log(self.addr_remap_ratio, 2))
 
-        self.n_registers = 17
+        # FIXME
+        #self.n_registers = 17
+        self.n_registers = 5
         self.register_list = []
 
         max_addressable = 2**(self.addr_width - byte_to_word_shift)
@@ -2273,6 +2131,348 @@ class TestAxiLiteHandlerBehaviouralSimulation(KeaTestCase):
             cycles, axi_lite_handler, axi_lite_handler, self.default_args,
             self.default_arg_types,
             custom_sources=[(rw_testbench, (), test_bench_args)])
+
+        assert(test_checks['test_run'])
+
+        self.assertEqual(dut_outputs, ref_outputs)
+
+    def test_write_to_register_with_bitfield(self):
+        ''' On writing a register that contains a bitfield, the values on the
+        bitfields should be updated directly from the register value.
+        '''
+        cycles = 4000
+        # FIXME
+        cycles = 100
+
+        test_checks = {'test_run': False, 'check_done': False}
+
+        def check_bitfield(expected_reg_val, bitfields):
+
+            self.assertEqual(expected_reg_val, bitfields.register)
+
+            for name in bitfields._bitfields_config:
+                offset = bitfields._bitfields_config[name]['offset']
+                mask = bitfields._bitfield_masks[name]
+                expected_val = (mask & expected_reg_val) >> offset
+
+                self.assertEqual(getattr(bitfields, name).val, expected_val)
+
+
+        @block
+        def testbench(clock, axil_nreset, axi_lite_interface, registers):
+
+            axi_lite_bfm = AxiLiteMasterBFM()
+            master_bfm = axi_lite_bfm.model(
+                self.clock, self.axil_nreset, self.axi_lite_interface)
+
+            add_write_transaction_prob = 0.05
+
+            t_check_state = enum(
+                'IDLE', 'AWAIT_RESPONSE')
+            check_state = Signal(t_check_state.IDLE)
+
+            test_data = {'address': 0,
+                         'write_response': None,}
+
+            register_lookup = {
+                n: name for n, name in enumerate(registers._register_types)}
+
+            # Init val is 0 for them all
+            expected_reg_values = {
+                reg_name: 0 for reg_name in registers._register_types}
+
+            @always(clock.posedge)
+            def stimulate_check():
+
+                if axi_lite_interface.BVALID:
+                    this_reg_name = register_lookup[test_data['address']]
+
+                    reg_type = registers._register_types[this_reg_name]
+
+                    # We ignore writes to read-only registers:
+                    if reg_type in ('axi_read_write', 'axi_write_only'):
+                        expected_reg_values[this_reg_name] = test_data['data']
+
+                    for register_name in expected_reg_values:
+                        expected_val = expected_reg_values[register_name]
+
+                        if register_name in bitfields_configs:
+                            bitfields = getattr(registers, register_name)
+                            check_bitfield(expected_val, bitfields)
+                        else:
+                            self.assertEqual(
+                                getattr(registers, register_name),
+                                expected_val)
+
+                        # We've done at least one check
+                        test_checks['check_done'] = True
+
+                    # We need to reset the expected value for write only
+                    # registers
+                    if reg_type == 'axi_write_only':
+                        expected_reg_values[this_reg_name] = 0
+
+                if check_state == t_check_state.IDLE:
+                    if random.random() < add_write_transaction_prob:
+                        # At a random time set up an axi lite write
+                        # transaction with some address.
+                        test_data['address'] = random.choice(
+                            self.valid_addresses)
+                        test_data['data'] = random.randint(
+                            0, 2**self.data_width-1)
+
+                        # Add the write transaction to the queue.
+                        axi_lite_bfm.add_write_transaction(
+                            write_address=(
+                                self.addr_remap_ratio*test_data['address']),
+                            write_data=test_data['data'])
+
+                        check_state.next = t_check_state.AWAIT_RESPONSE
+
+                elif check_state == t_check_state.AWAIT_RESPONSE:
+                    try:
+                        # Try to get the response from the responses Queue.
+                        # Quietly continue if it's not there yet by branching
+                        # to the exception handler
+                        write_resp = axi_lite_bfm.write_responses.get(False)
+
+                        # Check that the write response is not an error.
+                        assert(write_resp['wr_resp']==0)
+
+                        # We've done at least one check
+                        test_checks['test_run'] = True
+
+                        check_state.next = t_check_state.IDLE
+
+                    except queue.Empty:
+                        pass
+
+            return stimulate_check, master_bfm
+
+        bitfields_configs = {
+            key: create_bitfields_config(self.data_width)[0]
+            for key in self.writeable_registers if random.random() < 0.5}
+        # FIXME delete this
+        bitfields_configs = {
+            key: create_bitfields_config(self.data_width)[0]
+            for key in self.writeable_registers}
+
+        for each in bitfields_configs:
+            print(each)
+            print(self.register_types[each])
+            print(bitfields_configs[each])
+
+
+        registers = Registers(
+            self.register_list, self.register_types,
+            register_width=self.data_width, bitfields=bitfields_configs)
+
+        self.default_args['registers'] = registers
+
+        for reg_name in bitfields_configs:
+            assert registers.register_types[reg_name] != 'axi_read_only'
+
+            bitfield_interface_types = {
+                name: 'output' for name in bitfields_configs[reg_name]}
+
+            bitfield_interface_types['register'] = 'output'
+
+            self.default_arg_types['registers'][reg_name] = (
+                bitfield_interface_types)
+
+
+        dut_outputs, ref_outputs = self.cosimulate(
+            cycles, axi_lite_handler, axi_lite_handler, self.default_args,
+            self.default_arg_types,
+            custom_sources=[(testbench, (), self.default_args)])#, keep_temp_files=True)
+
+        assert(test_checks['test_run'])
+        assert(test_checks['check_done'])
+
+        print(ref_outputs)
+        self.assertEqual(dut_outputs, ref_outputs)
+
+    def test_read_from_register_with_bitfield(self):
+        ''' On reading a register that contains a bitfield, the value read
+        should be the concatenation of the bitfields.
+        '''
+        cycles = 4000
+
+        test_checks = {'test_run': False, 'check_done': False}
+
+        def check_bitfield(expected_reg_val, bitfields):
+
+            self.assertEqual(expected_reg_val, bitfields.register)
+
+            for name in bitfields._bitfields_config:
+                offset = bitfields._bitfields_config[name]['offset']
+                mask = bitfields._bitfield_masks[name]
+                expected_val = (mask & expected_reg_val) >> offset
+
+                self.assertEqual(getattr(bitfields, name).val, expected_val)
+
+
+        @block
+        def testbench(clock, axil_nreset, axi_lite_interface, registers):
+
+            axi_lite_bfm = AxiLiteMasterBFM()
+            master_bfm = axi_lite_bfm.model(
+                self.clock, self.axil_nreset, self.axi_lite_interface)
+
+            add_write_transaction_prob = 0.05
+
+            t_check_state = enum(
+                'IDLE', 'DO_READ', 'AWAIT_RESPONSE')
+            check_state = Signal(t_check_state.IDLE)
+
+            test_data = {'address': 0,
+                         'write_response': None,}
+
+            register_lookup = {
+                n: name for n, name in enumerate(registers._register_types)}
+
+            expected_reg_val = [0]
+
+            def randomise_bitfields(register):
+                packed_reg_val = 0
+
+                for bf_name in register._bitfields_config:
+                    bitfield = getattr(register, bf_name)
+
+                    offset = register._bitfields_config[bf_name]['offset']
+                    bf_type = register._bitfields_config[bf_name]['type']
+
+                    if bf_type == 'bool':
+                        val = random.choice((True, False))
+
+                    else:
+                        length = register._bitfields_config[bf_name]['length']
+                        val = random.randrange(0, 2**length)
+
+                    bitfield.next = val
+                    packed_reg_val += val << offset
+
+                return packed_reg_val
+
+
+            @always(clock.posedge)
+            def stimulate_check():
+
+                if check_state == t_check_state.IDLE:
+                    if random.random() < add_write_transaction_prob:
+
+                        test_data['address'] = random.choice(
+                            self.read_only_registers_indices)
+
+                        reg_name = register_lookup[test_data['address']]
+                        # Randomise all the read only bitfields
+                        register = getattr(registers, reg_name)
+                        #expected_val = randomise_bitfields(reg)
+
+                        packed_reg_val = 0
+
+                        for bf_name in register._bitfields_config:
+                            bitfield = getattr(register, bf_name)
+
+                            offset = register._bitfields_config[bf_name]['offset']
+                            bf_type = register._bitfields_config[bf_name]['type']
+
+                            if bf_type == 'bool':
+                                val = random.choice((True, False))
+
+                            else:
+                                length = register._bitfields_config[bf_name]['length']
+                                val = random.randrange(0, 2**length)
+
+                            bitfield.next = val
+                            packed_reg_val += val << offset
+
+                        expected_reg_val[0] = packed_reg_val
+
+                        check_state.next = t_check_state.DO_READ
+
+                elif check_state == t_check_state.DO_READ:
+                    # We wait a cycle to do the read, so the bitfields are
+                    # set up properly
+
+                    # Add the write transaction to the queue.
+                    axi_lite_bfm.add_read_transaction(
+                        read_address=(
+                            self.addr_remap_ratio*test_data['address']))
+
+                    check_state.next = t_check_state.AWAIT_RESPONSE
+
+                elif check_state == t_check_state.AWAIT_RESPONSE:
+                    try:
+                        # Try to get the response from the responses Queue.
+                        # Quietly continue if it's not there yet by branching
+                        # to the exception handler
+                        read_resp = axi_lite_bfm.read_responses.get(False)
+
+                        # Check that the read response is not an error.
+                        assert(read_resp['rd_resp']==0)
+                        self.assertEqual(
+                            read_resp['rd_data'], expected_reg_val[0])
+
+                        # We've done at least one check
+                        test_checks['test_run'] = True
+
+                        check_state.next = t_check_state.IDLE
+
+                    except queue.Empty:
+                        pass
+
+            return stimulate_check, master_bfm
+
+#        class RegisterWrapper:
+#            # A hack to work around only one layer of interface supported
+#            # on the drive side
+#            def __init__(self, register_list, register_types, register_width,
+#                         bitfields):
+#
+#                self._WRAPPER_registers = Registers(
+#                    register_list, register_types, register_width, bitfields)
+#
+#                for register_name in self._WRAPPER_registers:
+#                    if isinstance(
+#                        getattr(self._registers[register_name]), Bitfields):
+#
+#                        for bitfield in self._registers[register_name]:
+#                            setattr(self,
+#
+#            @block
+#            def connect(self):
+#                for register_name in self._registers.register_types:
+#                    if isinstance(
+#                        getattr(self._registers[register_name]), Bitfields):
+#
+
+
+
+        registers = Registers(
+            self.register_list, self.register_types,
+            register_width=self.data_width, bitfields=bitfields_configs)
+
+        self.default_args['registers'] = registers
+
+        for reg_name in bitfields_configs:
+            assert registers.register_types[reg_name]=='axi_read_only'
+
+            bitfield_interface_types = {
+                name: 'custom' for name in bitfields_configs[reg_name]}
+
+            bitfield_interface_types['register'] = 'output'
+
+            self.default_arg_types['registers'][reg_name] = (
+                bitfield_interface_types)
+
+        print(self.default_arg_types)
+
+        cycles = 10
+        dut_outputs, ref_outputs = self.cosimulate(
+            cycles, axi_lite_handler, axi_lite_handler, self.default_args,
+            self.default_arg_types,
+            custom_sources=[(testbench, (), self.default_args)], keep_temp_files=True)
 
         assert(test_checks['test_run'])
 
