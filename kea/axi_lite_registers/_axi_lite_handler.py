@@ -1,5 +1,5 @@
 from kea.axi import AxiLiteInterface, axi_lite
-from ._registers import Registers
+from ._registers import Registers, Bitfields
 from myhdl import *
 from math import log, ceil
 
@@ -90,9 +90,16 @@ def axi_lite_handler(
     n_registers = len(registers.register_types)
 
     for name in registers.register_types:
-        interface_register = getattr(registers, name)
-        reg_type = registers.register_types[name]
+
+        interface_object = getattr(registers, name)
+
+        if isinstance(interface_object, Bitfields):
+            interface_register = interface_object.register
+        else:
+            interface_register = interface_object
+
         reg_initial_val = interface_register.val
+        reg_type = registers.register_types[name]
 
         write_signal = Signal(
             intbv(reg_initial_val)[len(interface_register):])
@@ -419,4 +426,11 @@ def axi_lite_handler(
     else:
         assign_do_writes = []
 
-    return read, write, assignment_blocks, address_remap, assign_do_writes
+    # Connect up the bitfields
+    bitfield_connections = []
+    for bitfield in registers._bitfields:
+        bitfield_connections.append(
+            getattr(registers, bitfield).bitfield_connector())
+
+    return (read, write, assignment_blocks, address_remap, assign_do_writes,
+            bitfield_connections)
