@@ -129,6 +129,9 @@ class Bitfields:
 
         '''
 
+        if len(bitfields_config) == 0:
+            raise ValueError('bitfields_config cannot be empty')
+
         if register_type not in (
             'axi_read_write', 'axi_read_only', 'axi_write_only'):
             raise ValueError(
@@ -306,8 +309,9 @@ class Bitfields:
                     rev_concat_list.append(padding)
 
             except IndexError:
-                if bitfield_stops[bitfield] < 32:
-                    padding = intbv(0)[32 - bitfield_stops[bitfield]:]
+                if bitfield_stops[bitfield] < register_width:
+                    padding = intbv(0)[
+                        register_width - bitfield_stops[bitfield]:]
                     rev_concat_list.append(padding)
 
         self.register = Signal(intbv(register_initial_val)[register_width:])
@@ -333,11 +337,24 @@ class Bitfields:
 
         elif self._reg_type in ('axi_read_only'):
 
-            reg_signal = ConcatSignal(*self._concat_list)
+            if len(self._concat_list) == 1:
+                # This is a hack to allow a concat signal to work in
+                # all cases. An alternative would be to special case single
+                # signals, but that doesn't work well with constants, which
+                # themselves would require a special case, and some hackery to
+                # have the constant read (and requiring initial_values to be
+                # turned on).
+                keep = Signal(True)
+                keep.driven = True
+
+                reg_signal = ConcatSignal(keep, self._concat_list[0])
+
+            else:
+                reg_signal = ConcatSignal(*self._concat_list)
 
             @always_comb
             def assign_register():
-                self.register.next = reg_signal
+                self.register.next = reg_signal[self._register_width:]
 
             return assign_register
 
@@ -351,6 +368,12 @@ class Registers(object):
     @property
     def register_types(self):
         return self._register_types
+
+    def __eq__(self, other):
+        return (self._bitfields == other._bitfields and
+                self._register_types == other._register_types and
+                self._register_width == other._register_width)
+
 
     def __init__(
         self, register_list, register_types=None, register_width=32,
@@ -392,6 +415,8 @@ class Registers(object):
             # Create a register types dictionary so that the system can handle
             # an empty register types argument.
             register_types = {}
+
+        self._register_width = register_width
 
         # Create an ordered dictionary
         self._register_types = OrderedDict()

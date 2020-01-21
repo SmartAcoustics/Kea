@@ -179,6 +179,15 @@ class TestBitfieldsInterfaceSimulation(KeaTestCase):
             ValueError, 'Bitfield `frobinate` overlaps with bitfield `length`',
             Bitfields, 32, 'axi_read_only', bitfields_config)
 
+    def test_empty_bitfields_error(self):
+        '''If bitfields_config is empty, a ValueError would be raised.
+        '''
+        bitfields_config = {}
+
+        self.assertRaisesRegex(
+            ValueError, 'bitfields_config cannot be empty',
+            Bitfields, 32, 'axi_read_write', bitfields_config)
+
     def test_bitfield_outside_register_error(self):
         '''If a bitfield is defined to be outside the width of the register,
         then a `ValueError` should be raised.
@@ -363,13 +372,32 @@ class TestBitfieldsInterfaceSimulation(KeaTestCase):
             'is not `axi_read_write`', Bitfields, 32, 'axi_write_only',
             bitfields_config, initial_values=initial_values)
 
-def create_bitfields_config(reg_len, include_consts=False):
+def create_bitfields_config(
+    reg_len, include_consts=False, single_bitfield=False):
+    '''single_bitfield implies a single full-width bitfield
+    '''
+    if single_bitfield:
+        # We can only use uint types to have a single bitfield
+        if include_consts:
+            bf_type = random.choice(('uint', 'const-uint'))
+        else:
+            bf_type = 'uint'
+
+        bitfields_config = {'a': {
+            'type': bf_type,
+            'length': reg_len,
+            'offset': 0}}
+
+        if bf_type == 'const-uint':
+            bitfields_config['a']['const-value'] = random.randrange(0, 2**reg_len)
+
+        return bitfields_config, ['a']
+
     offset = 0
     i = 0
     bitfields_config = {}
     ordered_bitfields = []
 
-    ordered_foo = []
     while offset < reg_len:
         if include_consts:
             bf_type = random.choice(
@@ -392,7 +420,6 @@ def create_bitfields_config(reg_len, include_consts=False):
 
             i += 1
 
-            ordered_foo.append(('uint', length, offset))
 
         elif bf_type == 'bool':
             bitfields_config[string.ascii_lowercase[i]] = {
@@ -401,7 +428,6 @@ def create_bitfields_config(reg_len, include_consts=False):
             ordered_bitfields.append(string.ascii_lowercase[i])
 
             i += 1
-            ordered_foo.append(('bool', length, offset))
 
         elif bf_type == 'const-uint':
             bitfields_config[string.ascii_lowercase[i]] = {
@@ -414,7 +440,6 @@ def create_bitfields_config(reg_len, include_consts=False):
 
             i += 1
 
-            ordered_foo.append(('uint', length, offset))
 
         elif bf_type == 'const-bool':
             bitfields_config[string.ascii_lowercase[i]] = {
@@ -424,12 +449,10 @@ def create_bitfields_config(reg_len, include_consts=False):
             ordered_bitfields.append(string.ascii_lowercase[i])
 
             i += 1
-            ordered_foo.append(('bool', length, offset))
 
         elif bf_type == 'padding':
-            ordered_foo.append(('pad', length, offset))
-
             pass
+
 
         offset += length
 
@@ -442,12 +465,24 @@ class TestBitfieldsRegisterAssignments(KeaTestCase):
     register type.
     '''
 
-    def do_ps_write_test(self, reg_type, reg_len, use_initial_values=False):
+    def setUp(self):
+        pass
+        #seed = random.randrange(2**32)
+        #random.seed(seed)
+
+    def do_ps_write_test(
+        self, reg_type, reg_len, use_initial_values=False,
+        single_bitfield=False):
         ''' A common test implementation for axi_write_only and axi_read_write
         register types.
         '''
 
-        bitfields_config, ordered_bitfields = create_bitfields_config(reg_len)
+        # Make sure we never construct an empty bitfields_config
+        bitfields_config = {}
+        while bitfields_config == {}:
+            bitfields_config, ordered_bitfields = (
+                create_bitfields_config(
+                    reg_len, single_bitfield=single_bitfield))
 
         initial_reg_val = 0
         if use_initial_values:
@@ -543,14 +578,22 @@ class TestBitfieldsRegisterAssignments(KeaTestCase):
             default_arg_types,
             custom_sources=[(testbench, (), default_args)])
 
-        self.assertEqual(dut_outputs, ref_outputs)
+        self.assertTrue(dut_outputs == ref_outputs)
 
-    def do_ps_read_only_test(self, reg_len, use_consts=False):
+    def do_ps_read_only_test(
+        self, reg_len, use_consts=False, single_bitfield=False):
         ''' A common test implementation for axi_read_only registers.
         '''
         reg_type = 'axi_read_only'
-        bitfields_config, ordered_bitfields = create_bitfields_config(
-            reg_len, include_consts=use_consts)
+
+        # Make sure we never construct an empty bitfields_config
+        bitfields_config = {}
+        while bitfields_config == {}:
+            bitfields_config, ordered_bitfields = (
+                create_bitfields_config(
+                    reg_len, include_consts=use_consts,
+                    single_bitfield=single_bitfield))
+
         bitfields = Bitfields(reg_len, reg_type, bitfields_config)
 
         reg_initial_value = 0
@@ -630,9 +673,9 @@ class TestBitfieldsRegisterAssignments(KeaTestCase):
         dut_outputs, ref_outputs = self.cosimulate(
             cycles, assignment_wrapper, assignment_wrapper, default_args,
             default_arg_types,
-            custom_sources=[(testbench, (), default_args)], keep_temp_files=True)
+            custom_sources=[(testbench, (), default_args)])
 
-        self.assertEqual(dut_outputs, ref_outputs)
+        self.assertTrue(dut_outputs == ref_outputs)
 
 
     def test_axi_read_write_assignments(self):
@@ -664,15 +707,33 @@ class TestBitfieldsRegisterAssignments(KeaTestCase):
         '''
         self.do_ps_read_only_test(32)
         # Do a strange register length too...
-        #self.do_ps_read_only_test(18)
+        self.do_ps_read_only_test(18)
 
     def test_axi_read_only_constants(self):
         '''When a bitfield is a constant type ('const-bool' or 'const-uint',
         its value should always be the constant value that has been set
         '''
-        self.do_ps_read_only_test(32, use_consts=True)
+        #self.do_ps_read_only_test(32, use_consts=True)
         # Do a strange register length too...
         self.do_ps_read_only_test(65, use_consts=True)
+
+    def test_axi_read_write_assignments_single_bitfield(self):
+        '''A register containing a single bitfield should be correctly written
+        from the internal register when the register type is `axi_read_write`.
+        '''
+        self.do_ps_write_test('axi_read_write', 32, single_bitfield=True)
+
+    def test_axi_write_only_assignments_single_bitfield(self):
+        '''A register containing a single bitfield should be correctly written
+        from the internal register when the register type is `axi_write_only`.
+        '''
+        self.do_ps_write_test('axi_write_only', 32, single_bitfield=True)
+
+    def test_axi_read_only_assignments_single_bitfield(self):
+        '''A register containing a single bitfield should be correctly drive
+        the internal register when the register type is `axi_read_only`.
+        '''
+        self.do_ps_read_only_test(32, use_consts=False, single_bitfield=True)
 
 class TestBitfieldsRegisterAssignmentsVivadoVhdlSimulation(
     KeaVivadoVHDLTestCase, TestBitfieldsRegisterAssignments):
