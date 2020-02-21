@@ -3,8 +3,6 @@ import random
 import string
 import copy
 
-#from veriutils import A
-
 from ._registers import Registers
 from ._axi_lite_handler import axi_lite_handler
 from .test_registers import create_bitfields_config
@@ -338,12 +336,6 @@ class TestAxiLiteHandlerBehaviouralSimulation(KeaTestCase):
 
     def setUp(self):
 
-        # FIXME
-        seed = random.randrange(2**32)
-        seed = 779019085
-        random.seed(seed)
-        print(seed)
-
         self.available_register_types = [
             'axi_read_write', 'axi_write_only', 'axi_read_only']
 
@@ -359,9 +351,7 @@ class TestAxiLiteHandlerBehaviouralSimulation(KeaTestCase):
 
         byte_to_word_shift = int(log(self.addr_remap_ratio, 2))
 
-        # FIXME
-        #self.n_registers = 17
-        self.n_registers = 5
+        self.n_registers = 17
         self.register_list = []
 
         max_addressable = 2**(self.addr_width - byte_to_word_shift)
@@ -1550,6 +1540,10 @@ class TestAxiLiteHandlerBehaviouralSimulation(KeaTestCase):
 
         assert(test_checks['test_run'])
 
+        all_equal = True
+        for a, b in zip(dut_outputs['axi_lite_interface'], ref_outputs['axi_lite_interface']):
+            all_equal = all_equal and (a == b)
+
         self.assertEqual(
             dut_outputs['axi_lite_interface'],
             ref_outputs['axi_lite_interface'])
@@ -2141,8 +2135,6 @@ class TestAxiLiteHandlerBehaviouralSimulation(KeaTestCase):
         bitfields should be updated directly from the register value.
         '''
         cycles = 4000
-        # FIXME
-        cycles = 100
 
         test_checks = {'test_run': False, 'check_done': False}
 
@@ -2252,16 +2244,6 @@ class TestAxiLiteHandlerBehaviouralSimulation(KeaTestCase):
         bitfields_configs = {
             key: create_bitfields_config(self.data_width)[0]
             for key in self.writeable_registers if random.random() < 0.5}
-        # FIXME delete this
-        bitfields_configs = {
-            key: create_bitfields_config(self.data_width)[0]
-            for key in self.writeable_registers}
-
-        for each in bitfields_configs:
-            print(each)
-            print(self.register_types[each])
-            print(bitfields_configs[each])
-
 
         registers = Registers(
             self.register_list, self.register_types,
@@ -2284,12 +2266,11 @@ class TestAxiLiteHandlerBehaviouralSimulation(KeaTestCase):
         dut_outputs, ref_outputs = self.cosimulate(
             cycles, axi_lite_handler, axi_lite_handler, self.default_args,
             self.default_arg_types,
-            custom_sources=[(testbench, (), self.default_args)])#, keep_temp_files=True)
+            custom_sources=[(testbench, (), self.default_args)])
 
         assert(test_checks['test_run'])
         assert(test_checks['check_done'])
 
-        print(ref_outputs)
         self.assertEqual(dut_outputs, ref_outputs)
 
     def test_read_from_register_with_bitfield(self):
@@ -2311,6 +2292,8 @@ class TestAxiLiteHandlerBehaviouralSimulation(KeaTestCase):
 
                 self.assertEqual(getattr(bitfields, name).val, expected_val)
 
+
+        # FIXME need to set the RW registers in the test.
 
         @block
         def testbench(clock, axil_nreset, axi_lite_interface, registers):
@@ -2365,29 +2348,15 @@ class TestAxiLiteHandlerBehaviouralSimulation(KeaTestCase):
                             self.read_only_registers_indices)
 
                         reg_name = register_lookup[test_data['address']]
+
                         # Randomise all the read only bitfields
                         register = getattr(registers, reg_name)
-                        #expected_val = randomise_bitfields(reg)
 
-                        packed_reg_val = 0
-
-                        for bf_name in register._bitfields_config:
-                            bitfield = getattr(register, bf_name)
-
-                            offset = register._bitfields_config[bf_name]['offset']
-                            bf_type = register._bitfields_config[bf_name]['type']
-
-                            if bf_type == 'bool':
-                                val = random.choice((True, False))
-
-                            else:
-                                length = register._bitfields_config[bf_name]['length']
-                                val = random.randrange(0, 2**length)
-
-                            bitfield.next = val
-                            packed_reg_val += val << offset
-
-                        expected_reg_val[0] = packed_reg_val
+                        if reg_name in bitfields_configs:
+                            expected_reg_val[0] = randomise_bitfields(register)
+                        else:
+                            expected_reg_val[0] = random.randrange(0, 2**32)
+                            register.next = expected_reg_val[0]
 
                         check_state.next = t_check_state.DO_READ
 
@@ -2424,30 +2393,9 @@ class TestAxiLiteHandlerBehaviouralSimulation(KeaTestCase):
 
             return stimulate_check, master_bfm
 
-#        class RegisterWrapper:
-#            # A hack to work around only one layer of interface supported
-#            # on the drive side
-#            def __init__(self, register_list, register_types, register_width,
-#                         bitfields):
-#
-#                self._WRAPPER_registers = Registers(
-#                    register_list, register_types, register_width, bitfields)
-#
-#                for register_name in self._WRAPPER_registers:
-#                    if isinstance(
-#                        getattr(self._registers[register_name]), Bitfields):
-#
-#                        for bitfield in self._registers[register_name]:
-#                            setattr(self,
-#
-#            @block
-#            def connect(self):
-#                for register_name in self._registers.register_types:
-#                    if isinstance(
-#                        getattr(self._registers[register_name]), Bitfields):
-#
-
-
+        bitfields_configs = {
+            key: create_bitfields_config(self.data_width)[0]
+            for key in self.readable_registers if random.random() < 0.5}
 
         registers = Registers(
             self.register_list, self.register_types,
@@ -2456,23 +2404,32 @@ class TestAxiLiteHandlerBehaviouralSimulation(KeaTestCase):
         self.default_args['registers'] = registers
 
         for reg_name in bitfields_configs:
-            assert registers.register_types[reg_name]=='axi_read_only'
+            assert registers.register_types[reg_name] in (
+                'axi_read_only', 'axi_read_write')
 
-            bitfield_interface_types = {
-                name: 'custom' for name in bitfields_configs[reg_name]}
+            if registers.register_types[reg_name] == 'axi_read_only':
+                bitfield_interface_types = {
+                    name: 'custom' for name in bitfields_configs[reg_name]}
 
-            bitfield_interface_types['register'] = 'output'
+                # registers are always outputs since they are built from
+                # the signals.
+                bitfield_interface_types['register'] = 'output'
+                self.default_arg_types['registers'][reg_name] = (
+                    bitfield_interface_types)
 
-            self.default_arg_types['registers'][reg_name] = (
-                bitfield_interface_types)
+            else:
+                bitfield_interface_types = {
+                    name: 'output' for name in bitfields_configs[reg_name]}
 
-        print(self.default_arg_types)
+                bitfield_interface_types['register'] = 'output'
+                self.default_arg_types['registers'][reg_name] = (
+                    bitfield_interface_types)
 
-        cycles = 10
+
         dut_outputs, ref_outputs = self.cosimulate(
             cycles, axi_lite_handler, axi_lite_handler, self.default_args,
             self.default_arg_types,
-            custom_sources=[(testbench, (), self.default_args)], keep_temp_files=True)
+            custom_sources=[(testbench, (), self.default_args)])
 
         assert(test_checks['test_run'])
 

@@ -664,7 +664,12 @@ class TestBitfieldsRegisterAssignments(KeaTestCase):
 
         bitfield_types = {'register': 'output'}
         for bitfield in bitfields_config:
-            bitfield_types[bitfield] = 'custom'
+            bf_type = bitfields_config[bitfield]['type']
+
+            if bf_type in ('const-uint', 'const-bool'):
+                bitfield_types[bitfield] = 'non-signal'
+            else:
+                bitfield_types[bitfield] = 'custom'
 
         default_arg_types = {
             'clock': 'clock',
@@ -713,7 +718,7 @@ class TestBitfieldsRegisterAssignments(KeaTestCase):
         '''When a bitfield is a constant type ('const-bool' or 'const-uint',
         its value should always be the constant value that has been set
         '''
-        #self.do_ps_read_only_test(32, use_consts=True)
+        self.do_ps_read_only_test(32, use_consts=True)
         # Do a strange register length too...
         self.do_ps_read_only_test(65, use_consts=True)
 

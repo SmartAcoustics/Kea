@@ -279,9 +279,6 @@ class Bitfields:
 
             bitfield_masks[bitfield] = mask
             setattr(self, bitfield, bf_signal)
-            if isinstance(bf_signal, myhdl._Signal._Signal):
-                bf_signal._name = bitfield
-
 
         # We now need to construct the packed version of the bitfields,
         # including padding.
