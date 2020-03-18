@@ -116,16 +116,15 @@ class Bitfields:
             - Only read-write registers can have an initial value.
 
         An example bitfield entry might look something like:
-            {'go':
-                {'type': 'uint',
-                 'length': 6,
-                 'offset': 0},
-                {'type': 'bool',
-                 'offset': 6},
-                {'type': 'const-uint',
-                 'length': 5,
-                 'offset': 7,
-                 'const-value': 15}}
+            {'foo':{'type': 'uint',
+                    'length': 6,
+                    'offset': 0},
+             'bar': {'type': 'bool',
+                     'offset': 6},
+             'baz': {'type': 'const-uint',
+                     'length': 5,
+                     'offset': 7,
+                     'const-value': 15}}
 
         '''
 

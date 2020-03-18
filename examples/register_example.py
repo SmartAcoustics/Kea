@@ -12,7 +12,19 @@ except ImportError:
     import Queue as queue
 
 register_names = [
-        'control', 'counter_reset_value', 'status']
+        'control', 'counter_reset_value', 'status', 'system_id']
+
+bitfields = {
+    'control': {'go': {'type': 'bool', 'offset': 0}},
+    'system_id': {'device_type': {'type': 'const-uint',
+                                  'length': 8,
+                                  'offset': 0,
+                                  'const-value': 0x5},
+                  'system_config_id': {'type': 'const-uint',
+                                       'length': 8,
+                                       'offset': 8,
+                                       'const-value': 0x3}
+                 }}
 
 @block
 def counter_block(clock, axil_resetn, axi_lite_bus):
@@ -20,21 +32,23 @@ def counter_block(clock, axil_resetn, axi_lite_bus):
     register_types = {
         'control': 'axi_write_only',
         'counter_reset_value': 'axi_read_write',
-        'status': 'axi_read_only'}
+        'status': 'axi_read_only',
+        'system_id': 'axi_read_only'}
 
     register_initial_values = {
         'counter_reset_value': 100}
 
     registers = Registers(
         register_names, register_types,
-        initial_values=register_initial_values)
+        initial_values=register_initial_values,
+        bitfields=bitfields)
 
     counter = Signal(intbv(0)[32:])
 
     @always(clock.posedge)
     def do_counter():
 
-        if registers.control[0]:
+        if registers.control.go:
             # Reset
             counter.next = 0
 
@@ -107,13 +121,18 @@ def top():
 
     bfm_inst = bfm.model(clock, axil_resetn, axi_lite_interface)
 
-    t_test_states = enum('IDLE', 'READING', 'WRITING')
-    test_state = Signal(t_test_states.IDLE)
+    t_test_states = enum('INIT', 'IDLE', 'READING', 'WRITING')
+    test_state = Signal(t_test_states.INIT)
 
     @always(clock.posedge)
     def test_driver():
 
-        if test_state == t_test_states.IDLE:
+        if test_state == t_test_states.INIT:
+            print('Reading the system id')
+            bfm.add_read_transaction(register_names.index('system_id') * 4)
+            test_state.next = t_test_states.READING
+
+        elif test_state == t_test_states.IDLE:
             random_val = random.random()
 
             # Remember, the list index should be multiplied by 4 to get the
@@ -168,5 +187,43 @@ def runner():
     top_inst = top()
     top_inst.run_sim()
 
+
+def register_converter():
+
+    data_width = 32
+    addr_width = 4
+
+    register_types = {
+        'control': 'axi_write_only',
+        'counter_reset_value': 'axi_read_write',
+        'status': 'axi_read_only',
+        'system_id': 'axi_read_only'}
+
+    register_initial_values = {
+        'counter_reset_value': 100}
+
+    registers = Registers(
+        register_names, register_types,
+        initial_values=register_initial_values,
+        bitfields=bitfields)
+
+    axi_lite_interface = AxiLiteInterface(
+        data_width, addr_width, use_AWPROT=False, use_ARPROT=False,
+        use_WSTRB=False)
+
+    axil_resetn = Signal(True)
+    clock = Signal(False)
+
+    register_handler = axi_lite_handler(
+        clock, axil_resetn, axi_lite_interface, registers)
+
+    myhdl.toVerilog.initial_values = True
+
+    register_handler.convert()
+
+
 if __name__ == '__main__':
+    # Convert (because we can)
+    register_converter()
+
     runner()
