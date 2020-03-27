@@ -218,6 +218,14 @@ class AxiLiteMasterBFM(object):
 
         Read and write transactions can be triggered using the
         ``add_read_transaction`` and ``add_write_transaction`` respectively.
+
+        The responses to those transactions should be checked by interacting
+        with the `write_responses` or `read_responses` queues, which are
+        instances of `queue.Queue`.
+
+        Note read_responses and write_responses are instantiated simply, so can
+        be overwritten with equivalent objects if desired - they need only
+        obey the Queue interface.
         '''
         # Add write or read transactions to this BFM. Read transactions
         # comprise:
@@ -243,7 +251,9 @@ class AxiLiteMasterBFM(object):
         self, write_address, write_data, write_strobes=None,
         write_protection=None, address_delay=0, data_delay=0,
         response_ready_delay=0):
-        '''Add write transactions to the BFM.
+        '''Add write transactions to the BFM. This is handled with a thread
+        safe Queue, so it should be fine to call this function from whatever
+        thread you wish.
         '''
 
         self.write_transactions.put({'wr_addr': write_address,
@@ -258,7 +268,9 @@ class AxiLiteMasterBFM(object):
     def add_read_transaction(
         self, read_address, read_protection=None,
         address_delay=0, data_delay=0):
-        ''' Add read transactions to the BFM.
+        ''' Add read transactions to the BFM. This is handled with a thread
+        safe Queue, so it should be fine to call this function from whatever
+        thread you wish.
         '''
 
         self.read_transactions.put({'rd_addr': read_address,
