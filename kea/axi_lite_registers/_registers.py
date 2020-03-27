@@ -399,8 +399,9 @@ class Registers(object):
         `bitfields` is an optional dictionary argument in which each register
         that is included in the dictionary is populated as a Bitfield interface
         rather than a signal. Each data in bitfields is passed directly as the
-        second argument to the initialisation of a `Bitfield` class. See the
-        documentation for that class to see what form the data should be.
+        bitfields_config argument to the initialisation of a `Bitfield` class.
+        See the documentation for that class to see what form the data should
+        be.
         '''
 
         for name in register_list:
