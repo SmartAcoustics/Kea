@@ -2,7 +2,7 @@ from myhdl import block, always_comb, always, Signal
 
 from kea.axi import AxiStreamInterface
 
-from jackdaw.utils import signal_assigner
+from kea.utils import signal_assigner
 
 @block
 def axis_signal_buffer(

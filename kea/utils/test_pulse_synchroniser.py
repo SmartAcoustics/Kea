@@ -5,10 +5,10 @@ import random
 
 from ._pulse_synchroniser import pulse_synchroniser
 
-from jackdaw.test_utils.base_test import (
-    JackdawTestCase, JackdawVivadoVHDLTestCase, JackdawVivadoVerilogTestCase)
+from kea.test_utils.base_test import (
+    KeaTestCase, KeaVivadoVHDLTestCase, KeaVivadoVerilogTestCase)
 
-class TestPulseSynchroniserSimulation(JackdawTestCase):
+class TestPulseSynchroniserSimulation(KeaTestCase):
 
     def setUp(self):
 
@@ -315,10 +315,10 @@ class TestPulseSynchroniserSimulation(JackdawTestCase):
         self.assertTrue(dut_outputs == ref_outputs)
 
 class TestPulseSynchroniserVivadoVhdlSimulation(
-    JackdawVivadoVHDLTestCase, TestPulseSynchroniserSimulation):
+    KeaVivadoVHDLTestCase, TestPulseSynchroniserSimulation):
     pass
 
 class TestPulseSynchroniserVivadoVerilogSimulation(
-    JackdawVivadoVerilogTestCase, TestPulseSynchroniserSimulation):
+    KeaVivadoVerilogTestCase, TestPulseSynchroniserSimulation):
     pass
 

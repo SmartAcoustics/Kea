@@ -1,8 +1,8 @@
 from myhdl import ConcatSignal, block, always_comb, Signal, intbv
 from math import ceil
 
-from jackdaw.utils import signal_assigner
-from jackdaw.utils._vector_and import vector_and
+from kea.utils import signal_assigner
+from kea.utils._vector_and import vector_and
 
 @block
 def variable_width_and(output, input_signals):

@@ -2,7 +2,7 @@
 from myhdl import *
 import myhdl
 
-from jackdaw.utils import constant_assigner
+from kea.utils import constant_assigner
 
 @block
 def ramp_towards(

@@ -8,13 +8,13 @@ from myhdl import (
 from kea.axi import (
     AxiStreamInterface, AxiStreamMasterBFM, AxiStreamSlaveBFM)
 
-from jackdaw.utils import or_gate
-from jackdaw.test_utils.base_test import (
-    JackdawTestCase, JackdawVivadoVHDLTestCase, JackdawVivadoVerilogTestCase)
+from kea.utils import or_gate
+from kea.test_utils.base_test import (
+    KeaTestCase, KeaVivadoVHDLTestCase, KeaVivadoVerilogTestCase)
 
 from ._axis_buffer import axis_buffer
 
-class TestAxisBufferInterface(JackdawTestCase):
+class TestAxisBufferInterface(KeaTestCase):
 
     def setUp(self):
 
@@ -213,7 +213,7 @@ def axis_types_generator(sink=False, use_TLAST=True):
 
     return types
 
-class TestAxisBuffer(JackdawTestCase):
+class TestAxisBuffer(KeaTestCase):
 
     def setUp(self):
 
@@ -656,9 +656,9 @@ class TestAxisBuffer(JackdawTestCase):
         self.assertTrue(dut_outputs == ref_outputs)
 
 class TestAxisBufferVivadoVhdl(
-    JackdawVivadoVHDLTestCase, TestAxisBuffer):
+    KeaVivadoVHDLTestCase, TestAxisBuffer):
     pass
 
 class TestAxisBufferVivadoVerilog(
-    JackdawVivadoVerilogTestCase, TestAxisBuffer):
+    KeaVivadoVerilogTestCase, TestAxisBuffer):
     pass

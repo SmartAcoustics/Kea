@@ -2,12 +2,12 @@ import random
 
 from myhdl import block, Signal, always, intbv
 
-from jackdaw.test_utils.base_test import (
-    JackdawTestCase, JackdawVivadoVHDLTestCase, JackdawVivadoVerilogTestCase)
+from kea.test_utils.base_test import (
+    KeaTestCase, KeaVivadoVHDLTestCase, KeaVivadoVerilogTestCase)
 
 from ._vector_or import vector_or
 
-class TestVectorOrInterfaceSimulation(JackdawTestCase):
+class TestVectorOrInterfaceSimulation(KeaTestCase):
 
     def setUp(self):
         self.result = Signal(False)
@@ -36,7 +36,7 @@ def vector_or_wrapper(clock, output, input_signal):
 
     return vector_or(output, input_signal)
 
-class TestVectorOrSimulation(JackdawTestCase):
+class TestVectorOrSimulation(KeaTestCase):
 
     def setUp(self):
         self.clock = Signal(False)
@@ -184,9 +184,9 @@ class TestVectorOrSimulation(JackdawTestCase):
         self.assertEqual(dut_outputs, ref_outputs)
 
 class TestVectorOrVivadoVhdlSimulation(
-    JackdawVivadoVHDLTestCase, TestVectorOrSimulation):
+    KeaVivadoVHDLTestCase, TestVectorOrSimulation):
     pass
 
 class TestVectorOrVivadoVerilogSimulation(
-    JackdawVivadoVerilogTestCase, TestVectorOrSimulation):
+    KeaVivadoVerilogTestCase, TestVectorOrSimulation):
     pass

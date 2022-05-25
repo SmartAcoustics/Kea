@@ -2,8 +2,8 @@ import random
 
 from myhdl import block, Signal, always, StopSimulation
 
-from jackdaw.test_utils.base_test import (
-    JackdawTestCase, JackdawVivadoVHDLTestCase, JackdawVivadoVerilogTestCase)
+from kea.test_utils.base_test import (
+    KeaTestCase, KeaVivadoVHDLTestCase, KeaVivadoVerilogTestCase)
 
 from .logic import (
     and_gate, or_gate, not_gate, nand_gate, nor_gate, exor_gate, exnor_gate)
@@ -44,7 +44,7 @@ def exnor_gate_wrapper(clock, signal_in_0, signal_in_1, signal_out):
 
     return exnor_gate(signal_in_0, signal_in_1, signal_out)
 
-class TestLogicSimulation(JackdawTestCase):
+class TestLogicSimulation(KeaTestCase):
 
     def setUp(self):
 
@@ -430,9 +430,9 @@ class TestLogicSimulation(JackdawTestCase):
         self.assertTrue(self.tests_complete)
 
 class TestLogicVivadoVhdlSimulation(
-    JackdawVivadoVHDLTestCase, TestLogicSimulation):
+    KeaVivadoVHDLTestCase, TestLogicSimulation):
     pass
 
 class TestLogicVivadoVerilogSimulation(
-    JackdawVivadoVerilogTestCase, TestLogicSimulation):
+    KeaVivadoVerilogTestCase, TestLogicSimulation):
     pass

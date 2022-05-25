@@ -1,6 +1,6 @@
 from myhdl import *
 
-from jackdaw.utils import synchronous_signal_assigner, signal_assigner
+from kea.utils import synchronous_signal_assigner, signal_assigner
 
 @block
 def pulse_generator(clock, reset, trigger, output, pulse_n_cycles):

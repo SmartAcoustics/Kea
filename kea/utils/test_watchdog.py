@@ -4,10 +4,10 @@ from math import ceil
 
 from myhdl import Signal, block, always, intbv, StopSimulation
 
-from jackdaw.test_utils.base_test import (
-    JackdawTestCase, JackdawVivadoVHDLTestCase, JackdawVivadoVerilogTestCase)
+from kea.test_utils.base_test import (
+    KeaTestCase, KeaVivadoVHDLTestCase, KeaVivadoVerilogTestCase)
 
-from jackdaw.utils import rising_edge_detector, constant_assigner
+from kea.utils import rising_edge_detector, constant_assigner
 
 from ._watchdog import watchdog
 
@@ -33,7 +33,7 @@ def test_args_setup():
 
     return args, arg_types
 
-class TestWatchdogInterface(JackdawTestCase):
+class TestWatchdogInterface(KeaTestCase):
     ''' The watchdog block should reject incompatible interfaces and
     arguments.
     '''
@@ -118,7 +118,7 @@ class TestWatchdogInterface(JackdawTestCase):
         )
 
 
-class TestWatchdog(JackdawTestCase):
+class TestWatchdog(KeaTestCase):
 
     def setUp(self):
 
@@ -496,8 +496,8 @@ class TestWatchdog(JackdawTestCase):
         assert(self.tests_run)
         self.assertEqual(dut_outputs, ref_outputs)
 
-class TestWatchdogVivadoVhdl(JackdawVivadoVHDLTestCase, TestWatchdog):
+class TestWatchdogVivadoVhdl(KeaVivadoVHDLTestCase, TestWatchdog):
     pass
 
-class TestWatchdogVivadoVerilog(JackdawVivadoVerilogTestCase, TestWatchdog):
+class TestWatchdogVivadoVerilog(KeaVivadoVerilogTestCase, TestWatchdog):
     pass

@@ -2,12 +2,12 @@ import random
 
 from myhdl import block, always, Signal
 
-from jackdaw.test_utils.base_test import (
-    JackdawTestCase, JackdawVivadoVHDLTestCase, JackdawVivadoVerilogTestCase)
+from kea.test_utils.base_test import (
+    KeaTestCase, KeaVivadoVHDLTestCase, KeaVivadoVerilogTestCase)
 
 from ._sr_flip_flop import sr_flip_flop
 
-class TestSRFlipFlopSimulation(JackdawTestCase):
+class TestSRFlipFlopSimulation(KeaTestCase):
 
     def setUp(self):
         self.clock = Signal(False)
@@ -106,9 +106,9 @@ class TestSRFlipFlopSimulation(JackdawTestCase):
         self.assertEqual(dut_outputs, ref_outputs)
 
 class TestSRFlipFlopVivadoVhdlSimulation(
-    JackdawVivadoVHDLTestCase, TestSRFlipFlopSimulation):
+    KeaVivadoVHDLTestCase, TestSRFlipFlopSimulation):
     pass
 
 class TestSRFlipFlopVivadoVerilogSimulation(
-    JackdawVivadoVerilogTestCase, TestSRFlipFlopSimulation):
+    KeaVivadoVerilogTestCase, TestSRFlipFlopSimulation):
     pass

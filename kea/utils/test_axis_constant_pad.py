@@ -3,14 +3,14 @@ from myhdl import *
 import random
 import copy
 
-from jackdaw.test_utils.base_test import (
-    JackdawTestCase, JackdawVivadoVHDLTestCase, JackdawVivadoVerilogTestCase)
+from kea.test_utils.base_test import (
+    KeaTestCase, KeaVivadoVHDLTestCase, KeaVivadoVerilogTestCase)
 from kea.axi import AxiStreamInterface
 
 from .axis_constant_pad import axis_constant_pad
 
 
-class TestAxisConstantPad(JackdawTestCase):
+class TestAxisConstantPad(KeaTestCase):
 
     def setUp(self):
 
@@ -231,10 +231,10 @@ class TestAxisConstantPad(JackdawTestCase):
         self.assertTrue(dut_results == ref_results)
 
 class TestAxisConstantPadVivadoVHDL(
-    JackdawVivadoVHDLTestCase, TestAxisConstantPad):
+    KeaVivadoVHDLTestCase, TestAxisConstantPad):
     pass
 
 class TestAxisConstantPadVivadoVerilog(
-    JackdawVivadoVerilogTestCase, TestAxisConstantPad):
+    KeaVivadoVerilogTestCase, TestAxisConstantPad):
     pass
 

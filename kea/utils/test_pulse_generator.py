@@ -1,7 +1,7 @@
 from ._pulse_generator import pulse_generator
 
-from jackdaw.test_utils.base_test import (
-    JackdawTestCase, JackdawVivadoVHDLTestCase, JackdawVivadoVerilogTestCase)
+from kea.test_utils.base_test import (
+    KeaTestCase, KeaVivadoVHDLTestCase, KeaVivadoVerilogTestCase)
 
 import random
 
@@ -36,7 +36,7 @@ def test_args_setup():
 
     return args, arg_types
 
-class TestPulseGeneratorInterface(JackdawTestCase):
+class TestPulseGeneratorInterface(KeaTestCase):
     ''' The block should reject incompatible interfaces.
     '''
 
@@ -74,7 +74,7 @@ class TestPulseGeneratorInterface(JackdawTestCase):
             **self.args,
         )
 
-class TestPulseGenerator(JackdawTestCase):
+class TestPulseGenerator(KeaTestCase):
 
     def setUp(self):
 
@@ -186,9 +186,9 @@ class TestPulseGenerator(JackdawTestCase):
         self.assertEqual(dut_outputs, ref_outputs)
 
 class TestPulseGeneratorVivadoVhdl(
-    JackdawVivadoVHDLTestCase, TestPulseGenerator):
+    KeaVivadoVHDLTestCase, TestPulseGenerator):
     pass
 
 class TestPulseGeneratorVivadoVerilog(
-    JackdawVivadoVerilogTestCase, TestPulseGenerator):
+    KeaVivadoVerilogTestCase, TestPulseGenerator):
     pass

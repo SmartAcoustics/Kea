@@ -2,12 +2,12 @@ import random
 
 from myhdl import *
 
-from jackdaw.test_utils.base_test import (
-    JackdawTestCase, JackdawVivadoVHDLTestCase, JackdawVivadoVerilogTestCase)
+from kea.test_utils.base_test import (
+    KeaTestCase, KeaVivadoVHDLTestCase, KeaVivadoVerilogTestCase)
 
 from ._synchronous_signal_assigner import synchronous_signal_assigner
 
-class TestSyncSignalAssignerInterfaceSimulation(JackdawTestCase):
+class TestSyncSignalAssignerInterfaceSimulation(KeaTestCase):
     ''' The signal_assigner should reject incompatible interfaces and
     arguments.
     '''
@@ -78,7 +78,7 @@ class TestSyncSignalAssignerInterfaceSimulation(JackdawTestCase):
             invalid_offset,
             )
 
-class TestSyncSignalAssignerSimulation(JackdawTestCase):
+class TestSyncSignalAssignerSimulation(KeaTestCase):
 
     def setUp(self):
 
@@ -478,9 +478,9 @@ class TestSyncSignalAssignerSimulation(JackdawTestCase):
         self.assertEqual(dut_outputs, ref_outputs)
 
 class TestSyncSignalAssignerVivadoVhdlSimulation(
-    JackdawVivadoVHDLTestCase, TestSyncSignalAssignerSimulation):
+    KeaVivadoVHDLTestCase, TestSyncSignalAssignerSimulation):
     pass
 
 class TestSyncSignalAssignerVivadoVerilogSimulation(
-    JackdawVivadoVerilogTestCase, TestSyncSignalAssignerSimulation):
+    KeaVivadoVerilogTestCase, TestSyncSignalAssignerSimulation):
     pass

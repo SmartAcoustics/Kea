@@ -2,12 +2,12 @@ import random
 
 from myhdl import *
 
-from jackdaw.test_utils.base_test import (
-    JackdawTestCase, JackdawVivadoVHDLTestCase, JackdawVivadoVerilogTestCase)
+from kea.test_utils.base_test import (
+    KeaTestCase, KeaVivadoVHDLTestCase, KeaVivadoVerilogTestCase)
 
 from ._constant_assigner import constant_assigner
 
-class TestConstantAssignerInterfaceSimulation(JackdawTestCase):
+class TestConstantAssignerInterfaceSimulation(KeaTestCase):
     ''' The constant_assigner should reject incompatible interfaces and
     arguments.
     '''
@@ -69,7 +69,7 @@ def constant_assigner_wrapper(clock, constant, signal):
 
     return constant_assigner(constant, signal)
 
-class TestConstantAssignerSimulation(JackdawTestCase):
+class TestConstantAssignerSimulation(KeaTestCase):
 
     def setUp(self):
 
@@ -219,9 +219,9 @@ class TestConstantAssignerSimulation(JackdawTestCase):
         self.assertEqual(dut_outputs, ref_outputs)
 
 class TestConstantAssignerVivadoVhdlSimulation(
-    JackdawVivadoVHDLTestCase, TestConstantAssignerSimulation):
+    KeaVivadoVHDLTestCase, TestConstantAssignerSimulation):
     pass
 
 class TestConstantAssignerVivadoVerilogSimulation(
-    JackdawVivadoVerilogTestCase, TestConstantAssignerSimulation):
+    KeaVivadoVerilogTestCase, TestConstantAssignerSimulation):
     pass

@@ -5,8 +5,8 @@ from collections import deque
 import random
 import warnings
 
-from jackdaw.test_utils.base_test import (
-    JackdawTestCase, JackdawVivadoVHDLTestCase, JackdawVivadoVerilogTestCase)
+from kea.test_utils.base_test import (
+    KeaTestCase, KeaVivadoVHDLTestCase, KeaVivadoVerilogTestCase)
 from kea.axi import (
     AxiStreamInterface, AxiStreamMasterBFM, AxiStreamSlaveBFM)
 
@@ -18,7 +18,7 @@ pair of axi stream interfaces.
 Outside of the periodic cycles, transactions should be disabled.
 '''
 
-class TestAxisPeriodicEnableInterface(JackdawTestCase):
+class TestAxisPeriodicEnableInterface(KeaTestCase):
 
     def setUp(self):
 
@@ -117,7 +117,7 @@ class TestAxisPeriodicEnableInterface(JackdawTestCase):
             axis_periodic_enable, **self.default_args)
 
 
-class TestAxisPeriodicEnableSimulation(JackdawTestCase):
+class TestAxisPeriodicEnableSimulation(KeaTestCase):
 
     def setUp(self):
 
@@ -735,9 +735,9 @@ class TestAxisPeriodicEnableSimulation(JackdawTestCase):
         self.assertTrue(dut_outputs == ref_outputs)
 
 class TestAxisPeriodicEnableVivadoVhdlSimulation(
-    JackdawVivadoVHDLTestCase, TestAxisPeriodicEnableSimulation):
+    KeaVivadoVHDLTestCase, TestAxisPeriodicEnableSimulation):
     pass
 
 class TestAxisPeriodicEnableVivadoVerilogSimulation(
-    JackdawVivadoVerilogTestCase, TestAxisPeriodicEnableSimulation):
+    KeaVivadoVerilogTestCase, TestAxisPeriodicEnableSimulation):
     pass

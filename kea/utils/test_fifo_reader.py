@@ -1,7 +1,7 @@
 from ._fifo_reader import fifo_reader
 
-from jackdaw.test_utils.base_test import (
-    JackdawTestCase, JackdawVivadoVHDLTestCase, JackdawVivadoVerilogTestCase)
+from kea.test_utils.base_test import (
+    KeaTestCase, KeaVivadoVHDLTestCase, KeaVivadoVerilogTestCase)
 
 import random
 import copy
@@ -47,7 +47,7 @@ def test_args_setup():
 
     return args, arg_types
 
-class TestFifoReaderInterface(JackdawTestCase):
+class TestFifoReaderInterface(KeaTestCase):
 
     def setUp(self):
 
@@ -132,7 +132,7 @@ class TestFifoReaderInterface(JackdawTestCase):
             **self.args,
         )
 
-class TestFifoReader(JackdawTestCase):
+class TestFifoReader(KeaTestCase):
 
     def setUp(self):
 
@@ -596,9 +596,9 @@ class TestFifoReader(JackdawTestCase):
         self.assertTrue(dut_outputs == ref_outputs)
 
 class TestFifoReaderVivadoVhdl(
-    JackdawVivadoVHDLTestCase, TestFifoReader):
+    KeaVivadoVHDLTestCase, TestFifoReader):
     pass
 
 class TestFifoReaderVivadoVerilog(
-    JackdawVivadoVerilogTestCase, TestFifoReader):
+    KeaVivadoVerilogTestCase, TestFifoReader):
     pass

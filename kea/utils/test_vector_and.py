@@ -2,8 +2,8 @@ import random
 
 from myhdl import block, Signal, always, intbv
 
-from jackdaw.test_utils.base_test import (
-    JackdawTestCase, JackdawVivadoVHDLTestCase, JackdawVivadoVerilogTestCase)
+from kea.test_utils.base_test import (
+    KeaTestCase, KeaVivadoVHDLTestCase, KeaVivadoVerilogTestCase)
 
 from ._vector_and import vector_and
 
@@ -33,7 +33,7 @@ def test_args_setup():
 
     return args, arg_types
 
-class TestVectorAndInterface(JackdawTestCase):
+class TestVectorAndInterface(KeaTestCase):
 
     def setUp(self):
 
@@ -60,7 +60,7 @@ def vector_and_wrapper(clock, output, input_signal):
 
     return vector_and(output, input_signal)
 
-class TestVectorAnd(JackdawTestCase):
+class TestVectorAnd(KeaTestCase):
 
     def setUp(self):
 
@@ -192,9 +192,9 @@ class TestVectorAnd(JackdawTestCase):
         self.assertEqual(dut_outputs, ref_outputs)
 
 class TestVectorAndVivadoVhdl(
-    JackdawVivadoVHDLTestCase, TestVectorAnd):
+    KeaVivadoVHDLTestCase, TestVectorAnd):
     pass
 
 class TestVectorAndVivadoVerilog(
-    JackdawVivadoVerilogTestCase, TestVectorAnd):
+    KeaVivadoVerilogTestCase, TestVectorAnd):
     pass

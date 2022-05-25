@@ -3,12 +3,12 @@ import copy
 
 from myhdl import *
 
-from jackdaw.test_utils.base_test import (
-    JackdawTestCase, JackdawVivadoVHDLTestCase, JackdawVivadoVerilogTestCase)
+from kea.test_utils.base_test import (
+    KeaTestCase, KeaVivadoVHDLTestCase, KeaVivadoVerilogTestCase)
 
 from ._double_buffer import double_buffer
 
-class TestDoubleBufferSimulation(JackdawTestCase):
+class TestDoubleBufferSimulation(KeaTestCase):
 
     def setUp(self):
 
@@ -108,9 +108,9 @@ class TestDoubleBufferSimulation(JackdawTestCase):
         self.assertEqual(dut_outputs, ref_outputs)
 
 class TestDoubleBufferVivadoVhdlSimulation(
-    JackdawVivadoVHDLTestCase, TestDoubleBufferSimulation):
+    KeaVivadoVHDLTestCase, TestDoubleBufferSimulation):
     pass
 
 class TestDoubleBufferVivadoVerilogSimulation(
-    JackdawVivadoVerilogTestCase, TestDoubleBufferSimulation):
+    KeaVivadoVerilogTestCase, TestDoubleBufferSimulation):
     pass

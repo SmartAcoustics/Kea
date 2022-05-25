@@ -2,12 +2,12 @@ import random
 
 from ._ramp_towards import ramp_towards
 
-from jackdaw.test_utils.base_test import (
-    JackdawTestCase, JackdawVivadoVHDLTestCase, JackdawVivadoVerilogTestCase)
+from kea.test_utils.base_test import (
+    KeaTestCase, KeaVivadoVHDLTestCase, KeaVivadoVerilogTestCase)
 
 from myhdl import *
 
-class TestRampTowardsInterface(JackdawTestCase):
+class TestRampTowardsInterface(KeaTestCase):
     '''The interface of the ramp_towards block should protect against
     problematic arguments.
     '''
@@ -219,7 +219,7 @@ def stimulate_and_check(
 
     return ramp_checker, stimulate
 
-class TestRampTowardsSimulation(JackdawTestCase):
+class TestRampTowardsSimulation(KeaTestCase):
     '''There should be a ramp_towards block that ramps a ``current_value``
     signal towards a ``target`` value.
     '''
@@ -472,10 +472,10 @@ class TestRampTowardsSimulation(JackdawTestCase):
 
 
 class TestRampTowardsVivadoVHDLSimulation(
-    JackdawVivadoVHDLTestCase, TestRampTowardsSimulation):
+    KeaVivadoVHDLTestCase, TestRampTowardsSimulation):
     pass
 
 class TestRampTowardsVivadoVerilogSimulation(
-    JackdawVivadoVerilogTestCase, TestRampTowardsSimulation):
+    KeaVivadoVerilogTestCase, TestRampTowardsSimulation):
     pass
 

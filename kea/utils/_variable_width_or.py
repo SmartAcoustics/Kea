@@ -1,6 +1,6 @@
 from myhdl import ConcatSignal, block, always_comb, Signal
 
-from jackdaw.utils._vector_or import vector_or
+from kea.utils._vector_or import vector_or
 
 @block
 def variable_width_or(output, input_signals):

@@ -1,7 +1,7 @@
 from myhdl import block, always_comb, Signal, intbv
 
-from jackdaw.utils import signal_assigner
-from jackdaw.utils._vector_not import vector_not
+from kea.utils import signal_assigner
+from kea.utils._vector_not import vector_not
 
 @block
 def vector_and(output, input_signal):

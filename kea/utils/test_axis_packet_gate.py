@@ -2,8 +2,8 @@ from myhdl import *
 import random
 from collections import deque
 
-from jackdaw.test_utils.base_test import (
-    JackdawTestCase, JackdawVivadoVHDLTestCase, JackdawVivadoVerilogTestCase)
+from kea.test_utils.base_test import (
+    KeaTestCase, KeaVivadoVHDLTestCase, KeaVivadoVerilogTestCase)
 from kea.axi import (
     AxiStreamInterface, AxiStreamMasterBFM, AxiStreamSlaveBFM)
 
@@ -16,7 +16,7 @@ signal is encountered, and then it will block again until a new trigger
 is asserted.
 '''
 
-class TestAxisPacketGateInterface(JackdawTestCase):
+class TestAxisPacketGateInterface(KeaTestCase):
 
     def setUp(self):
 
@@ -88,7 +88,7 @@ class TestAxisPacketGateInterface(JackdawTestCase):
             ValueError, 'Missing axis_out TLAST signal',
             axis_packet_gate, **args)
 
-class TestAxisPacketGateSimulation(JackdawTestCase):
+class TestAxisPacketGateSimulation(KeaTestCase):
 
     def setUp(self):
 
@@ -495,9 +495,9 @@ class TestAxisPacketGateSimulation(JackdawTestCase):
         self.assertTrue(dut_outputs == ref_outputs)
 
 class TestAxisPacketGateVivadoVhdlSimulation(
-    JackdawVivadoVHDLTestCase, TestAxisPacketGateSimulation):
+    KeaVivadoVHDLTestCase, TestAxisPacketGateSimulation):
     pass
 
 class TestAxisPacketGateVivadoVerilogSimulation(
-    JackdawVivadoVerilogTestCase, TestAxisPacketGateSimulation):
+    KeaVivadoVerilogTestCase, TestAxisPacketGateSimulation):
     pass

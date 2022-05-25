@@ -2,7 +2,7 @@ from math import ceil
 
 from myhdl import block, Signal, intbv, always
 
-from jackdaw.utils import rising_edge_detector, constant_assigner
+from kea.utils import rising_edge_detector, constant_assigner
 
 @block
 def watchdog(

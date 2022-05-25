@@ -2,12 +2,12 @@ import random
 
 from myhdl import *
 
-from jackdaw.test_utils.base_test import (
-    JackdawTestCase, JackdawVivadoVHDLTestCase, JackdawVivadoVerilogTestCase)
+from kea.test_utils.base_test import (
+    KeaTestCase, KeaVivadoVHDLTestCase, KeaVivadoVerilogTestCase)
 
 from ._signal_slicer import signal_slicer
 
-class TestSignalSlicerInterfaceSimulation(JackdawTestCase):
+class TestSignalSlicerInterfaceSimulation(KeaTestCase):
     ''' The signal_slicer should reject incompatible interfaces and arguments.
     '''
 
@@ -112,7 +112,7 @@ def signal_slicer_wrapper(
 
     return signal_slicer(signal_in, slice_offset, slice_bitwidth, signal_out)
 
-class TestSignalSlicerSimulation(JackdawTestCase):
+class TestSignalSlicerSimulation(KeaTestCase):
 
     def setUp(self):
 
@@ -264,9 +264,9 @@ class TestSignalSlicerSimulation(JackdawTestCase):
         self.assertEqual(dut_outputs, ref_outputs)
 
 class TestSignalSlicerVivadoVhdlSimulation(
-    JackdawVivadoVHDLTestCase, TestSignalSlicerSimulation):
+    KeaVivadoVHDLTestCase, TestSignalSlicerSimulation):
     pass
 
 class TestSignalSlicerVivadoVerilogSimulation(
-    JackdawVivadoVerilogTestCase, TestSignalSlicerSimulation):
+    KeaVivadoVerilogTestCase, TestSignalSlicerSimulation):
     pass

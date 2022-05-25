@@ -2,12 +2,12 @@ import random
 
 from myhdl import block, Signal, always, intbv
 
-from jackdaw.test_utils.base_test import (
-    JackdawTestCase, JackdawVivadoVHDLTestCase, JackdawVivadoVerilogTestCase)
+from kea.test_utils.base_test import (
+    KeaTestCase, KeaVivadoVHDLTestCase, KeaVivadoVerilogTestCase)
 
 from ._variable_width_or import variable_width_or
 
-class TestVariableOrInterfaceSimulation(JackdawTestCase):
+class TestVariableOrInterfaceSimulation(KeaTestCase):
 
     def setUp(self):
         self.result = Signal(False)
@@ -72,7 +72,7 @@ def variable_width_or_wrapper(clock, output, input_signals):
 
     return variable_width_or(output, input_signals)
 
-class TestVariableOrSimulation(JackdawTestCase):
+class TestVariableOrSimulation(KeaTestCase):
 
     def setUp(self):
         self.clock = Signal(False)
@@ -227,9 +227,9 @@ class TestVariableOrSimulation(JackdawTestCase):
         self.assertEqual(dut_outputs, ref_outputs)
 
 class TestVariableOrVivadoVhdlSimulation(
-    JackdawVivadoVHDLTestCase, TestVariableOrSimulation):
+    KeaVivadoVHDLTestCase, TestVariableOrSimulation):
     pass
 
 class TestVariableOrVivadoVerilogSimulation(
-    JackdawVivadoVerilogTestCase, TestVariableOrSimulation):
+    KeaVivadoVerilogTestCase, TestVariableOrSimulation):
     pass

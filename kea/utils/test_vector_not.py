@@ -2,8 +2,8 @@ import random
 
 from myhdl import block, Signal, always, intbv
 
-from jackdaw.test_utils.base_test import (
-    JackdawTestCase, JackdawVivadoVHDLTestCase, JackdawVivadoVerilogTestCase)
+from kea.test_utils.base_test import (
+    KeaTestCase, KeaVivadoVHDLTestCase, KeaVivadoVerilogTestCase)
 
 from ._vector_not import vector_not
 
@@ -33,7 +33,7 @@ def test_args_setup():
 
     return args, arg_types
 
-class TestVectorNotInterface(JackdawTestCase):
+class TestVectorNotInterface(KeaTestCase):
 
     def setUp(self):
 
@@ -63,7 +63,7 @@ def vector_not_wrapper(clock, output, input_signal):
 
     return vector_not(output, input_signal)
 
-class TestVectorNot(JackdawTestCase):
+class TestVectorNot(KeaTestCase):
 
     def setUp(self):
 
@@ -196,9 +196,9 @@ class TestVectorNot(JackdawTestCase):
         self.assertEqual(dut_outputs, ref_outputs)
 
 class TestVectorNotVivadoVhdl(
-    JackdawVivadoVHDLTestCase, TestVectorNot):
+    KeaVivadoVHDLTestCase, TestVectorNot):
     pass
 
 class TestVectorNotVivadoVerilog(
-    JackdawVivadoVerilogTestCase, TestVectorNot):
+    KeaVivadoVerilogTestCase, TestVectorNot):
     pass

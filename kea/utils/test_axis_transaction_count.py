@@ -5,8 +5,8 @@ from myhdl import ToVerilogWarning, ToVHDLWarning
 import random
 import warnings
 
-from jackdaw.test_utils.base_test import (
-    JackdawTestCase, JackdawVivadoVHDLTestCase, JackdawVivadoVerilogTestCase)
+from kea.test_utils.base_test import (
+    KeaTestCase, KeaVivadoVHDLTestCase, KeaVivadoVerilogTestCase)
 from kea.axi import AxiStreamInterface
 
 from .axis_transaction_count import (
@@ -241,22 +241,22 @@ class TestAxisCountTransactionsMixin(object):
 
 
 class TestAxisCountValidTransactionsInterface(
-    TestAxisCountTransactionsInterfaceMixin, JackdawTestCase):
+    TestAxisCountTransactionsInterfaceMixin, KeaTestCase):
 
     counter_block_name = 'axis_count_valid_transactions'
 
 class TestAxisCountSinkNotReadyTransactionsInterface(
-    TestAxisCountTransactionsInterfaceMixin, JackdawTestCase):
+    TestAxisCountTransactionsInterfaceMixin, KeaTestCase):
 
     counter_block_name = 'axis_count_sink_not_ready'
 
 class TestAxisCountSourceNotValidTransactionsInterface(
-    TestAxisCountTransactionsInterfaceMixin, JackdawTestCase):
+    TestAxisCountTransactionsInterfaceMixin, KeaTestCase):
 
     counter_block_name = 'axis_count_source_not_valid'
 
 class TestAxisCountValidTransactionsSimulation(
-    TestAxisCountTransactionsMixin, JackdawTestCase):
+    TestAxisCountTransactionsMixin, KeaTestCase):
 
     counter_block_name = 'axis_count_valid_transactions'
 
@@ -270,7 +270,7 @@ class TestAxisCountValidTransactionsSimulation(
         return define_count
 
 class TestAxisCountSinkNotReadyTransactionsSimulation(
-    TestAxisCountTransactionsMixin, JackdawTestCase):
+    TestAxisCountTransactionsMixin, KeaTestCase):
 
     counter_block_name = 'axis_count_sink_not_ready'
 
@@ -284,7 +284,7 @@ class TestAxisCountSinkNotReadyTransactionsSimulation(
         return define_count
 
 class TestAxisCountSourceNotValidTransactionsSimulation(
-    TestAxisCountTransactionsMixin, JackdawTestCase):
+    TestAxisCountTransactionsMixin, KeaTestCase):
 
     counter_block_name = 'axis_count_source_not_valid'
 
@@ -316,32 +316,32 @@ class SupressConversionWarningsMixin(object):
                 *args, **kwargs)
 
 class TestAxisCountValidTransactionsVivadoVHDLSimulation(
-    SupressConversionWarningsMixin, JackdawVivadoVHDLTestCase,
+    SupressConversionWarningsMixin, KeaVivadoVHDLTestCase,
     TestAxisCountValidTransactionsSimulation):
     pass
 
 class TestAxisCountSinkNotReadyTransactionsVivadoVHDLSimulation(
-    SupressConversionWarningsMixin, JackdawVivadoVHDLTestCase,
+    SupressConversionWarningsMixin, KeaVivadoVHDLTestCase,
     TestAxisCountSinkNotReadyTransactionsSimulation):
     pass
 
 class TestAxisCountSourceNotValidTransactionsVivadoVHDLSimulation(
-    SupressConversionWarningsMixin, JackdawVivadoVHDLTestCase,
+    SupressConversionWarningsMixin, KeaVivadoVHDLTestCase,
     TestAxisCountSourceNotValidTransactionsSimulation):
     pass
 
 class TestAxisCountValidTransactionsVivadoVerilogSimulation(
     SupressConversionWarningsMixin,
-    JackdawVivadoVerilogTestCase, TestAxisCountValidTransactionsSimulation):
+    KeaVivadoVerilogTestCase, TestAxisCountValidTransactionsSimulation):
     pass
 
 class TestAxisCountSinkNotReadyTransactionsVivadoVerilogSimulation(
-    SupressConversionWarningsMixin, JackdawVivadoVerilogTestCase,
+    SupressConversionWarningsMixin, KeaVivadoVerilogTestCase,
     TestAxisCountSinkNotReadyTransactionsSimulation):
     pass
 
 class TestAxisCountSourceNotValidTransactionsVivadoVerilogSimulation(
-    SupressConversionWarningsMixin, JackdawVivadoVerilogTestCase,
+    SupressConversionWarningsMixin, KeaVivadoVerilogTestCase,
     TestAxisCountSourceNotValidTransactionsSimulation):
     pass
 

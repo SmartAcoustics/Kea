@@ -1,13 +1,13 @@
 from ._piso_shift_register import piso_shift_register
 
-from jackdaw.test_utils.base_test import (
-    JackdawTestCase, JackdawVivadoVHDLTestCase, JackdawVivadoVerilogTestCase)
+from kea.test_utils.base_test import (
+    KeaTestCase, KeaVivadoVHDLTestCase, KeaVivadoVerilogTestCase)
 
 import random
 
 from myhdl import *
 
-class TestPISOShiftRegisterInterfaceSimulation(JackdawTestCase):
+class TestPISOShiftRegisterInterfaceSimulation(KeaTestCase):
 
     def setUp(self):
 
@@ -299,7 +299,7 @@ def timing_checks(
 
     return return_objects
 
-class TestPISOShiftRegisterSimulation(JackdawTestCase):
+class TestPISOShiftRegisterSimulation(KeaTestCase):
 
     def setUp(self):
 
@@ -880,9 +880,9 @@ class TestPISOShiftRegisterSimulation(JackdawTestCase):
 
 
 class TestPISOShiftRegisterVivadoVHDLSimulation(
-    JackdawVivadoVHDLTestCase, TestPISOShiftRegisterSimulation):
+    KeaVivadoVHDLTestCase, TestPISOShiftRegisterSimulation):
     pass
 
 class TestPISOShiftRegisterVivadoVerilogSimulation(
-    JackdawVivadoVerilogTestCase, TestPISOShiftRegisterSimulation):
+    KeaVivadoVerilogTestCase, TestPISOShiftRegisterSimulation):
     pass

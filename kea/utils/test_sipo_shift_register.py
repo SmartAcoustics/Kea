@@ -1,7 +1,7 @@
 from ._sipo_shift_register import sipo_shift_register
 
-from jackdaw.test_utils.base_test import (
-    JackdawTestCase, JackdawVivadoVHDLTestCase, JackdawVivadoVerilogTestCase)
+from kea.test_utils.base_test import (
+    KeaTestCase, KeaVivadoVHDLTestCase, KeaVivadoVerilogTestCase)
 
 import random
 
@@ -110,7 +110,7 @@ def timing_checks(
 
     return return_objects
 
-class TestSIPOShiftRegisterSimulation(JackdawTestCase):
+class TestSIPOShiftRegisterSimulation(KeaTestCase):
     '''
     The SIPO shift register should obey the following timing diagram
     (defined in Wavedrom):
@@ -690,10 +690,10 @@ class TestSIPOShiftRegisterSimulation(JackdawTestCase):
         self.assertEqual(dut_outputs, ref_outputs)
 
 class TestSIPOShiftRegisterVivadoVHDLSimulation(
-    JackdawVivadoVHDLTestCase, TestSIPOShiftRegisterSimulation):
+    KeaVivadoVHDLTestCase, TestSIPOShiftRegisterSimulation):
     pass
 
 class TestSIPOShiftRegisterVivadoVerilogSimulation(
-    JackdawVivadoVerilogTestCase, TestSIPOShiftRegisterSimulation):
+    KeaVivadoVerilogTestCase, TestSIPOShiftRegisterSimulation):
     pass
 

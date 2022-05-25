@@ -1,14 +1,14 @@
 from ._falling_edge_detector import falling_edge_detector
 
-from jackdaw.test_utils.base_test import (
-    JackdawTestCase, JackdawVivadoVHDLTestCase, JackdawVivadoVerilogTestCase)
+from kea.test_utils.base_test import (
+    KeaTestCase, KeaVivadoVHDLTestCase, KeaVivadoVerilogTestCase)
 
 import random
 import copy
 
 from myhdl import *
 
-class TestFallingEdgeDetectorSimulation(JackdawTestCase):
+class TestFallingEdgeDetectorSimulation(KeaTestCase):
 
     def setUp(self):
 
@@ -225,9 +225,9 @@ class TestFallingEdgeDetectorSimulation(JackdawTestCase):
         self.assertEqual(dut_outputs, ref_outputs)
 
 class TestFallingEdgeDetectorVivadoVhdlSimulation(
-    JackdawVivadoVHDLTestCase, TestFallingEdgeDetectorSimulation):
+    KeaVivadoVHDLTestCase, TestFallingEdgeDetectorSimulation):
     pass
 
 class TestFallingEdgeDetectorVivadoVerilogSimulation(
-    JackdawVivadoVerilogTestCase, TestFallingEdgeDetectorSimulation):
+    KeaVivadoVerilogTestCase, TestFallingEdgeDetectorSimulation):
     pass
