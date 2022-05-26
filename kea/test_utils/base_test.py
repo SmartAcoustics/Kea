@@ -9,6 +9,9 @@ from ovenbird import VIVADO_EXECUTABLE
 import unittest
 import os
 
+import numpy as np
+import random
+
 VIVADO_DISABLE_REASON = ''
 
 try:
@@ -31,6 +34,57 @@ class KeaTestCase(HDLTestCase):
 
         return myhdl_cosimulation(
             sim_cycles, dut_factory, ref_factory, args, arg_types, **kwargs)
+
+    def run(self, result=None):
+
+        try:
+            numpy_seed = self.random_state[0]
+            random_seed = self.random_state[1]
+        except AttributeError:
+            numpy_seed = random.randrange(0, 2**32-1)
+            random_seed = random.randrange(0, 2**32-1)
+
+        np.random.seed(numpy_seed)
+        random.seed(random_seed)
+
+        if result is not None:
+            n_failures = len(result.failures)
+            n_errors = len(result.errors)
+
+        super(KeaTestCase, self).run(result)
+
+        try:
+            if result is not None:
+                if len(result.failures) != n_failures:
+
+                    this_failure = result.failures[-1]
+
+                    updated_failure = (
+                        this_failure[0],
+                        this_failure[-1] +
+                        '\nTo repeat random tests exactly, set '
+                        'self.random_state on the class with:\n'
+                        'random_state = (%d, %d)\n' % (
+                            numpy_seed, random_seed))
+
+                    result.failures[-1] = updated_failure
+
+                elif len(result.errors) != n_errors:
+
+                    this_error = result.errors[-1]
+
+                    updated_error = (
+                        this_error[0],
+                        this_error[-1] +
+                        '\nTo repeat random tests exactly, set '
+                        'self.random_state on the class with:\n'
+                        'random_state = (%d, %d)\n' % (
+                            numpy_seed, random_seed))
+
+                    result.errors[-1] = updated_error
+
+        except IndexError:
+            pass
 
     def tearDown(self):
         # FIXME
