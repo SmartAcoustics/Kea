@@ -20,3 +20,4 @@ from ._fifo_reader import fifo_reader
 from ._pulse_generator import pulse_generator
 from ._watchdog import watchdog
 from ._combined_signal_assigner import combined_signal_assigner
+from ._signal_slicer import signal_slicer
