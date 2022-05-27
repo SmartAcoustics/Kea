@@ -19,3 +19,4 @@ from .axis_flexi_bit_interface import AxiStreamFlexiBitInterface
 from ._fifo_reader import fifo_reader
 from ._pulse_generator import pulse_generator
 from ._watchdog import watchdog
+from ._combined_signal_assigner import combined_signal_assigner
