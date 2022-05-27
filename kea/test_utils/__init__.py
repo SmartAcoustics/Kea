@@ -1,2 +1,2 @@
-from base_test import (
+from .base_test import (
     KeaTestCase, KeaVivadoVHDLTestCase, KeaVivadoVerilogTestCase)

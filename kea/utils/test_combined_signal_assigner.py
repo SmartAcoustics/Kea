@@ -2,7 +2,7 @@ import random
 
 from myhdl import Signal, intbv, block, always
 
-from kea.test_utils.base_test import (
+from kea.test_utils import (
     KeaTestCase, KeaVivadoVHDLTestCase, KeaVivadoVerilogTestCase)
 
 from ._combined_signal_assigner import combined_signal_assigner
