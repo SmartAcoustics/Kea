@@ -211,7 +211,7 @@ def stimulate_and_check(
             test_data['ramping'] = True
             target.next = (
                 target - target.min + random.choice((-1, 1)) *
-                random.randrange((2**len(target))/4)) % (
+                random.randrange(int((2**len(target))/4))) % (
                     2**len(target)) + target.min
 
         if target == current_value:

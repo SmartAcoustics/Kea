@@ -1631,7 +1631,7 @@ class TestAxiLiteHandlerBehaviouralSimulation(KeaTestCase):
                             # The only valid address in this case is 0 so
                             # pick another value
                             test_data['address'] = random.randrange(
-                                1, 2**self.addr_width/self.addr_remap_ratio)
+                                1, 2**self.addr_width//self.addr_remap_ratio)
 
                             test_data['invalid_address'] = True
                             test_data['last_write_invalid'] = True
@@ -2039,7 +2039,7 @@ class TestAxiLiteHandlerBehaviouralSimulation(KeaTestCase):
                         # 50% of the time select an invalid address
                         if random.random() < 0.5:
                             test_data['address'] = random.randrange(
-                                1, 2**self.addr_width/self.addr_remap_ratio)
+                                1, 2**self.addr_width//self.addr_remap_ratio)
                             test_data['invalid_address'] = True
 
                         else:
