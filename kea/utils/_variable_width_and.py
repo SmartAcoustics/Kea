@@ -2,7 +2,7 @@ from myhdl import ConcatSignal, block, always_comb, Signal, intbv
 from math import ceil
 
 from kea.utils import signal_assigner
-from kea.utils._vector_and import vector_and
+from kea.utils._reducing_and import reducing_and
 
 @block
 def variable_width_and(output, input_signals):
@@ -35,6 +35,6 @@ def variable_width_and(output, input_signals):
         # Combine all of the input signals into one signal
         combined_input = ConcatSignal(*reversed(input_signals))
 
-        return_objects.append(vector_and(output, combined_input))
+        return_objects.append(reducing_and(output, combined_input))
 
     return return_objects

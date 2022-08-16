@@ -21,9 +21,15 @@ def signal_slicer(signal_in, slice_offset, slice_bitwidth, signal_out):
         raise ValueError(
             'slice_bitwidth must be equal to the signal_out width')
 
-    @always_comb
-    def assignment():
-        signal_out.next = (
-            signal_in[(slice_offset + slice_bitwidth): slice_offset])
+    if slice_bitwidth == 1:
+        @always_comb
+        def assignment():
+            signal_out.next = signal_in[slice_offset]
+
+    else:
+        @always_comb
+        def assignment():
+            signal_out.next = (
+                signal_in[(slice_offset + slice_bitwidth): slice_offset])
 
     return assignment

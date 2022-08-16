@@ -1,6 +1,6 @@
 from myhdl import ConcatSignal, block, always_comb, Signal
 
-from kea.utils._vector_or import vector_or
+from kea.utils._reducing_or import reducing_or
 
 @block
 def variable_width_or(output, input_signals):
@@ -31,6 +31,6 @@ def variable_width_or(output, input_signals):
         # Combine all of the input signals into one signal
         combined_input_signals = ConcatSignal(*reversed(input_signals))
 
-    return_objects.append(vector_or(output, combined_input_signals))
+    return_objects.append(reducing_or(output, combined_input_signals))
 
     return return_objects
