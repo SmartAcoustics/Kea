@@ -1,8 +1,8 @@
 from myhdl import ConcatSignal, block, always_comb, Signal, intbv
 from math import ceil
 
-from kea.utils import signal_assigner
-from kea.utils._reducing_and import reducing_and
+from ._signal_assigner import signal_assigner
+from ._reducing_and import reducing_and
 
 @block
 def variable_width_and(output, input_signals):

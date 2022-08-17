@@ -1,8 +1,9 @@
 from myhdl import block, Signal, intbv
 
-from kea.utils import variable_width_and, signal_assigner
-from kea.utils._combined_signal_assigner import combined_signal_assigner
-from kea.utils._signal_slicer import signal_slicer
+from ._variable_width_and import variable_width_and
+from ._signal_assigner import signal_assigner
+from ._combined_signal_assigner import combined_signal_assigner
+from ._signal_slicer import signal_slicer
 
 @block
 def vector_and(output, input_signals):

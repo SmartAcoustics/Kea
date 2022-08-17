@@ -18,8 +18,13 @@ from ._double_buffer import double_buffer
 from ._sr_flip_flop import sr_flip_flop
 from ._pulse_synchroniser import pulse_synchroniser
 from .axis_flexi_bit_interface import AxiStreamFlexiBitInterface
+from .axis_transaction_count import (
+    axis_count_valid_transactions, axis_count_sink_not_ready_transactions,
+    axis_count_source_not_valid_transactions)
+from ._axis_constant_pad import axis_constant_pad
 from ._fifo_reader import fifo_reader
 from ._pulse_generator import pulse_generator
 from ._watchdog import watchdog
 from ._combined_signal_assigner import combined_signal_assigner
 from ._signal_slicer import signal_slicer
+from ._ramp_towards import ramp_towards

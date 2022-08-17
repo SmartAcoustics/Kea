@@ -1,6 +1,6 @@
 from myhdl import block, ConcatSignal
 
-from kea.utils import signal_assigner
+from ._signal_assigner import signal_assigner
 
 @block
 def combined_signal_assigner(input_signals, signal_out):

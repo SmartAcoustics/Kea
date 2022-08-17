@@ -2,7 +2,7 @@
 from myhdl import *
 import myhdl
 
-from kea.utils import constant_assigner
+from ._constant_assigner import constant_assigner
 
 @block
 def ramp_towards(

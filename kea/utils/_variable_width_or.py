@@ -1,6 +1,6 @@
 from myhdl import ConcatSignal, block, always_comb, Signal
 
-from kea.utils._reducing_or import reducing_or
+from ._reducing_or import reducing_or
 
 @block
 def variable_width_or(output, input_signals):

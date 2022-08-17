@@ -1,7 +1,7 @@
 from myhdl import block, always_comb, Signal, intbv
 
-from kea.utils import signal_assigner
-from kea.utils._vector_not import vector_not
+from ._signal_assigner import signal_assigner
+from ._vector_not import vector_not
 
 @block
 def reducing_and(output, input_signal):

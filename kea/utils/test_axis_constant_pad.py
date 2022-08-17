@@ -7,7 +7,7 @@ from kea.test_utils.base_test import (
     KeaTestCase, KeaVivadoVHDLTestCase, KeaVivadoVerilogTestCase)
 from kea.axi import AxiStreamInterface
 
-from .axis_constant_pad import axis_constant_pad
+from ._axis_constant_pad import axis_constant_pad
 
 
 class TestAxisConstantPad(KeaTestCase):
