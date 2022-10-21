@@ -6,6 +6,7 @@ from ._variable_width_or import variable_width_or
 from ._vector_not import vector_not
 from ._vector_and import vector_and
 from ._vector_or import vector_or
+from ._vector_xor import vector_xor
 from ._reducing_or import reducing_or
 from ._reducing_and import reducing_and
 from .logic import (
@@ -28,3 +29,4 @@ from ._watchdog import watchdog
 from ._combined_signal_assigner import combined_signal_assigner
 from ._signal_slicer import signal_slicer
 from ._ramp_towards import ramp_towards
+from ._equality_detector import equality_detector
