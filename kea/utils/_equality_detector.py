@@ -6,8 +6,9 @@ from .logic import not_gate
 from ._synchronous_signal_assigner import synchronous_signal_assigner
 
 @block
-def equality_detector(clock, equal, input_0, input_1):
-    ''' When `input_0` and `input_1` are the same, `equal` will be high.
+def equality_detector(clock, enable, equal, input_0, input_1):
+    ''' When `enable` is high, if `input_0` and `input_1` are the same,
+    `equal` will be set high.
     '''
 
     return_objects = []
@@ -23,7 +24,7 @@ def equality_detector(clock, equal, input_0, input_1):
     @always(clock.posedge)
     def detector():
 
-        if input_0 == input_1:
+        if enable and (input_0 == input_1):
             equal.next = True
 
         else:

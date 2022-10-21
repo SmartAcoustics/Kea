@@ -13,16 +13,17 @@ def test_args_setup():
     ''' Generate the arguments and argument types for the DUT.
     '''
 
-    clock = Signal(False)
-
     bitwidth = 8
 
+    clock = Signal(False)
+    enable = Signal(False)
     equal = Signal(False)
     input_0 = Signal(intbv(0)[bitwidth:])
     input_1 = Signal(intbv(0)[bitwidth:])
 
     args = {
         'clock': clock,
+        'enable': enable,
         'equal': equal,
         'input_0': input_0,
         'input_1': input_1,
@@ -30,6 +31,7 @@ def test_args_setup():
 
     arg_types = {
         'clock': 'clock',
+        'enable': 'custom',
         'equal': 'output',
         'input_0': 'custom',
         'input_1': 'custom',
@@ -81,18 +83,25 @@ class TestEqualityDetector(KeaTestCase):
         self.args, self.arg_types = test_args_setup()
 
     @block
-    def random_signal_driver(self, clock, signal_0, signal_1):
+    def stim(self, clock, enable, input_0, input_1):
 
         return_objects = []
 
-        assert(len(signal_0) == len(signal_1))
+        assert(len(input_0) == len(input_1))
 
-        bitwidth = len(signal_0)
+        bitwidth = len(input_0)
         val_upper_bound = 2**bitwidth
         max_val = val_upper_bound-1
 
         @always(clock.posedge)
         def driver():
+
+            if not enable:
+                if random.random() < 0.1:
+                    enable.next = True
+            else:
+                if random.random() < 0.05:
+                    enable.next = False
 
             # Generate random stim values for the two inputs
             stim_values = (
@@ -122,8 +131,8 @@ class TestEqualityDetector(KeaTestCase):
                 # Set one stim value to max_val
                 stim_values[random.randrange(2)] = max_val
 
-            signal_0.next = stim_values[0]
-            signal_1.next = stim_values[1]
+            input_0.next = stim_values[0]
+            input_1.next = stim_values[1]
 
         return_objects.append(driver)
 
@@ -134,6 +143,7 @@ class TestEqualityDetector(KeaTestCase):
     def check_equality_detector(self, **kwargs):
 
         clock = kwargs['clock']
+        enable = kwargs['enable']
         equal = kwargs['equal']
         input_0 = kwargs['input_0']
         input_1 = kwargs['input_1']
@@ -141,7 +151,7 @@ class TestEqualityDetector(KeaTestCase):
         return_objects = []
 
         return_objects.append(
-            self.random_signal_driver(clock, input_0, input_1))
+            self.stim(clock, enable, input_0, input_1))
 
         # XOR the two inputs
         assert(len(input_0) == len(input_1))
@@ -159,21 +169,25 @@ class TestEqualityDetector(KeaTestCase):
 
             assert(equal == expected_equal)
 
-            expected_equal.next = not or_result
+            if enable:
+                expected_equal.next = not or_result
+
+            else:
+                expected_equal.next = False
 
         return_objects.append(check)
 
         return return_objects
 
     def test_equality_detector(self):
-        ''' The `equality_detector` block should set `equal` high when
-        `input_0` and 'input_1' are equal.
+        ''' When `enable` is high the `equality_detector` should set `equal`
+        high when `input_0` and 'input_1' are equal. If they are not equal
+        then the `equality_detector` should set `equal` low.
 
-        The `equality_detector` block should set `equal` low when `input_0`
-        and 'input_1' are equal.
+        When `enable` is low the `equality_detector` should set `equal` low.
         '''
 
-        cycles = 2000
+        cycles = 4000
 
         @block
         def test(**kwargs):
@@ -195,7 +209,7 @@ class TestEqualityDetector(KeaTestCase):
         bitwidths.
         '''
 
-        cycles = 2000
+        cycles = 4000
 
         bitwidth = random.randrange(2, 17)
         self.args['input_0'] = Signal(intbv(0)[bitwidth:])
@@ -221,7 +235,7 @@ class TestEqualityDetector(KeaTestCase):
         are 1 bit wide.
         '''
 
-        cycles = 2000
+        cycles = 4000
 
         bitwidth = 1
         self.args['input_0'] = Signal(intbv(0)[bitwidth:])
