@@ -42,6 +42,8 @@ class BitfieldMap(object):
         ''' Packs the values provided by the bitfield_values dict in to their
         respective bitfields and returns the resultant data word.
 
+        Any bitfields not included in bitfield_values will have a value of 0.
+
         Note: the bitfield_values dict can contain any arbitrary subset of
         bitfields that are in this map.
         '''
