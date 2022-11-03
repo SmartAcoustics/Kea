@@ -1,1 +1,1 @@
-from bitfield_map import BitfieldMap
+from ._bitfield_map import BitfieldMap
