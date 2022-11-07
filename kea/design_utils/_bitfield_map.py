@@ -1,42 +1,58 @@
+from ._bitfield_definition import BitfieldDefinition
+
 class BitfieldMap(object):
     ''' Define the bitfields within a data word.
     '''
 
-    def __init__(self):
+    def __init__(self, bitfield_definitions):
 
-        self._bitfields = {}
+        if not isinstance(bitfield_definitions, dict):
+            raise TypeError(
+                'BitfieldMap: bitfield_definitions should be a dict.')
+
+        self._bitfield_names = []
         self._data_word_bit_length = 0
         self._n_assigned_bits = 0
 
-    def add_bitfield(self, name, offset, bit_length):
-        ''' Add a bitfield to the map.
-        '''
+        for new_bitfield_name in bitfield_definitions:
 
-        if name in self._bitfields.keys():
-            raise ValueError(
-                'BitfieldMap.add_bitfield: Cannot create bitfield as ' +
-                name + ' already exists. Please use another name.')
+            new_bitfield = bitfield_definitions[new_bitfield_name]
 
-        upper_bound = offset + bit_length
-        max_val = upper_bound - 1
+            if not isinstance(new_bitfield, BitfieldDefinition):
+                raise TypeError(
+                    'BitfieldMap: Every element in bitfield_definitions '
+                    'should be a BitfieldDefinition.')
 
-        for bitfield in self._bitfields:
+            for existing_bitfield_name in self._bitfield_names:
 
-            if (offset in self._bitfields[bitfield] or
-                max_val in self._bitfields[bitfield]):
-                raise ValueError(
-                    'BitfieldMap.add_bitfield: Cannot create bitfield as the '
-                    'requested range overlaps the ' + bitfield + ' bitfield.')
+                existing_bitfield = getattr(self, existing_bitfield_name)
 
-        # Add the bitfield to the map
-        self._bitfields[name] = range(offset, upper_bound)
+                higher_offset = max(
+                    new_bitfield.offset,
+                    existing_bitfield.offset)
+                lower_upper_bound = min(
+                    new_bitfield.upper_bound_index,
+                    existing_bitfield.upper_bound_index)
 
-        if upper_bound > self._data_word_bit_length:
-            # Keep track of the length of the data word
-            self._data_word_bit_length = upper_bound
+                # Check that the bitfield does not overlap with another
+                if len(range(higher_offset, lower_upper_bound)) > 0:
+                    raise ValueError(
+                        'BitfieldMap: Overlapping bitfields. The overlapping '
+                        'bitfields are ' + new_bitfield_name + ' and ' +
+                        existing_bitfield_name + '.')
 
-        # Keep track of how many bits have been assigned to a bitfield
-        self._n_assigned_bits += bit_length
+            # We know new_bitfield_name is unique as it is a key from a dict
+            setattr(self, new_bitfield_name, new_bitfield)
+
+            # Keep a record of the bitfields
+            self._bitfield_names.append(new_bitfield_name)
+
+            if new_bitfield.upper_bound_index > self._data_word_bit_length:
+                # Keep track of the length of the data word
+                self._data_word_bit_length = new_bitfield.upper_bound_index
+
+            # Keep track of how many bits have been assigned to a bitfield
+            self._n_assigned_bits += new_bitfield.bit_length
 
     def pack(self, bitfield_values):
         ''' Packs the values provided by the bitfield_values dict in to their
@@ -50,66 +66,48 @@ class BitfieldMap(object):
 
         if not isinstance(bitfield_values, dict):
             raise TypeError(
-                'BitfieldMap.pack: bitfield_values should be a dictionary.')
+                'BitfieldMap: bitfield_values should be a dictionary.')
 
         packed_word = 0
 
-        for bitfield in bitfield_values.keys():
-            if bitfield not in self.bitfield_names:
+        for bitfield_name in bitfield_values.keys():
+            if bitfield_name not in self._bitfield_names:
                 raise ValueError(
-                    'BitfieldMap.pack: bitfield_values contains a value for '
-                    'a bitfield which is not included in this map. The '
-                    'invalid bitfield is ' + bitfield + '.')
+                    'BitfieldMap: bitfield_values contains a value for a '
+                    'bitfield which is not included in this map. The invalid '
+                    'bitfield is ' + bitfield_name + '.')
 
-            bitfield_value = bitfield_values[bitfield]
-            value_upper_bound = 2**self.bitfield_bit_length(bitfield)
-
-            if bitfield_value < 0:
-                raise ValueError(
-                    'BitfieldMap.pack: All bitfield values must be greater '
-                    'than 0. The specified value for the ' + bitfield +
-                    ' bitfield is ' + str(bitfield_values[bitfield]) + '.')
-
-            if bitfield_value >= value_upper_bound:
-                raise ValueError(
-                    'BitfieldMap.pack: The value specified for the ' +
-                    bitfield + ' bitfield is too large. The specified value '
-                    'is ' + str(bitfield_value) + ' but the upper bound on '
-                    'the value for this bitfield is ' +
-                    str(value_upper_bound) + '.')
+            bitfield = getattr(self, bitfield_name)
 
             # Shift the value into the correct position in the packed_word
-            packed_word |= bitfield_value << self.bitfield_offset(bitfield)
+            packed_word |= bitfield.pack(bitfield_values[bitfield_name])
 
         return packed_word
 
-    def bitfield_offset(self, bitfield):
-        ''' Returns the offset of the specified bitfield within the data word.
+    def bitfield(self, bitfield_name):
+        ''' Returns the bitfield specified by bitfield_name.
         '''
-        return self._bitfields[bitfield].start
+        # Check that the requested bitfield_name is valid
+        if bitfield_name not in self._bitfield_names:
+            raise ValueError(
+                'BitfieldMap: The requested bitfield is not included in this '
+                'map')
 
-    def bitfield_bit_length(self, bitfield):
-        ''' Returns the bit length of the specified bitfield.
-        '''
-        return len(self._bitfields[bitfield])
+        bitfield = getattr(self, bitfield_name)
 
-    def bitfield_upper_bound_index(self, bitfield):
-        ''' Returns the upper bound bit index within the data word assigned to
-        the specified bitfield.
-        '''
-        return self._bitfields[bitfield].stop
+        return bitfield
 
     @property
     def n_bitfields(self):
         ''' Returns the number of bitfields on this map.
         '''
-        return len(self._bitfields.keys())
+        return len(self._bitfield_names)
 
     @property
     def bitfield_names(self):
         ''' Returns a list containing the names of all of the bitfields.
         '''
-        return list(self._bitfields.keys())
+        return self._bitfield_names
 
     @property
     def data_word_bit_length(self):

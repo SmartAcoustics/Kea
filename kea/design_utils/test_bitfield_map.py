@@ -2,10 +2,12 @@ import random
 
 from kea.test_utils import KeaTestCase, random_string_generator
 
+from ._bitfield_definition import BitfieldDefinition
 from ._bitfield_map import BitfieldMap
 
-def random_bitfield_map(n_available_bits, n_bitfields):
-    ''' Generates `n_bitfields` which will fit within `n_available_bits`.
+def random_bitfield_definitions(n_available_bits, n_bitfields):
+    ''' Generates a bitfield_definitions dict with `n_bitfields` which will
+    fit within `n_available_bits`.
 
     This function will raise a ValueError if `n_bitfields` is too large for
     `n_available_bits` or if `n_bitfields` is an invalid number.
@@ -15,15 +17,14 @@ def random_bitfield_map(n_available_bits, n_bitfields):
         raise ValueError(
             'n_bitfields must be less than or equal to n_available_bits')
 
-    if n_bitfields <= 0:
-        raise ValueError('n_bitfields must be greater than 0')
+    if n_bitfields < 0:
+        raise ValueError('n_bitfields must be greater than or equal to 0')
 
     # Select random offsets within the available range
     offsets = random.sample(range(n_available_bits), n_bitfields)
     offsets.sort()
 
     expected_bitfields = {}
-    bitfield_map = BitfieldMap()
 
     for n in range(n_bitfields):
 
@@ -45,18 +46,33 @@ def random_bitfield_map(n_available_bits, n_bitfields):
             # before the next offset
             bit_length = random.randrange(1, gap + 1)
 
-        bitfield_map.add_bitfield(bitfield_name, offsets[n], bit_length)
-
         expected_bitfields[bitfield_name] = {
             'offset': offsets[n],
             'bit_length': bit_length,
         }
 
-    return bitfield_map, expected_bitfields
+    # Extract the expected_bitfields into a list of tuples and then shuffle
+    # the order.
+    expected_bitfields_items = list(expected_bitfields.items())
+    random.shuffle(expected_bitfields_items)
+
+    bitfield_definitions = {}
+
+    for bitfield_name, bitfield_spec in expected_bitfields_items:
+        # Add each bitfield to the bitfield_definitions
+        bitfield_definitions[bitfield_name] = (
+            BitfieldDefinition(
+                bitfield_spec['offset'], bitfield_spec['bit_length']))
+
+    return bitfield_definitions, expected_bitfields
 
 def generate_random_bitfield_values(bitfield_map, n_bitfields=None):
     ''' Generates random and valid bitfield values for BitfieldMap.pack().
     '''
+
+    if bitfield_map.n_bitfields <= 0:
+        # There are no bitfields in the bitfield map so return an empty dict
+        return {}
 
     if n_bitfields is None:
         # Pick a random selection of bitfields to receive a value
@@ -66,39 +82,61 @@ def generate_random_bitfield_values(bitfield_map, n_bitfields=None):
 
     bitfield_values = {}
 
-    for bitfield in bitfields:
+    for bitfield_name in bitfields:
         # Generate a valid random value for each bitfield
-        val_upper_bound = 2**bitfield_map.bitfield_bit_length(bitfield)
+        bitfield = bitfield_map.bitfield(bitfield_name)
+        val_upper_bound = 2**bitfield.bit_length
         val = random.randrange(val_upper_bound)
 
-        bitfield_values[bitfield] = val
+        bitfield_values[bitfield_name] = val
 
     return bitfield_values
 
-class TestBitfieldMap(KeaTestCase):
+class BitfieldMapSimulationMixIn(object):
 
     def setUp(self):
 
-        self.bitfield_map, self.expected_bitfields = (
-            random_bitfield_map(32, 4))
+        self.bitfield_definitions, self.expected_bitfields = (
+            random_bitfield_definitions(
+                self.n_available_bits, self.n_bitfields))
 
-    def test_repeated_bitfield_name(self):
-        ''' The `add_bitfield` method on the `BitfieldMap` should raise an
-        error if the specified `name` already exists.
+        # Create the bitfield map
+        self.bitfield_map = BitfieldMap(self.bitfield_definitions)
+
+    def test_invalid_bitfield_definitions(self):
+        ''' The `BitfieldMap` should raise an error if the
+        `bitfield_definitions` is not a `dict`.
         '''
 
-        repeated_name = random.choice(list(self.expected_bitfields.keys()))
-        offset = 0
-        bit_length = 1
+        bitfield_definitions = random.randrange(0, 100)
 
         self.assertRaisesRegex(
-            ValueError,
-            ('BitfieldMap.add_bitfield: Cannot create bitfield as ' +
-             repeated_name + ' already exists. Please use another name.'),
-            self.bitfield_map.add_bitfield,
-            repeated_name,
-            offset,
-            bit_length,
+            TypeError,
+            ('BitfieldMap: bitfield_definitions should be a dict.'),
+            BitfieldMap,
+            bitfield_definitions,
+        )
+
+    def test_invalid_bitfield_definition(self):
+        ''' The `BitfieldMap` should raise an error if any entry in the
+        `bitfield_definitions` is not a `BitfieldDefinition`.
+        '''
+
+        if len(self.expected_bitfields) <= 0:
+            # The bitfield map is being created with 0 bitfields so we cannot
+            # run this test.
+            return True
+
+        # Pick a random bitfield and set it to the wrong type
+        bitfield = random.choice(list(self.bitfield_definitions.keys()))
+        self.bitfield_definitions[bitfield] = random.randrange(0, 100)
+
+        self.assertRaisesRegex(
+            TypeError,
+            ('BitfieldMap: Every element in bitfield_definitions '
+             'should be a BitfieldDefinition.'),
+            BitfieldMap,
+            self.bitfield_definitions,
         )
 
     def test_overlapping_bitfields(self):
@@ -106,6 +144,11 @@ class TestBitfieldMap(KeaTestCase):
         error if the specified `offset` and `bit_length` overlap a bitfield
         which already exists.
         '''
+
+        if len(self.expected_bitfields) <= 0:
+            # The bitfield map is being created with 0 bitfields so we cannot
+            # run this test.
+            return True
 
         overlapped = random.choice(list(self.expected_bitfields.keys()))
         overlapped_offset = self.expected_bitfields[overlapped]['offset']
@@ -119,85 +162,79 @@ class TestBitfieldMap(KeaTestCase):
 
         # Overlapping the lower index
         # ===========================
+
         overlapping_offset = overlapped_offset
+
+        self.bitfield_definitions[overlapping_name] = (
+            BitfieldDefinition(overlapping_offset, overlapping_bit_length))
 
         self.assertRaisesRegex(
             ValueError,
-            ('BitfieldMap.add_bitfield: Cannot create bitfield as the '
-             'requested range overlaps the ' + overlapped + ' bitfield.'),
-            self.bitfield_map.add_bitfield,
-            overlapping_name,
-            overlapping_offset,
-            overlapping_bit_length,
+            ('BitfieldMap: Overlapping bitfields. The overlapping '
+             'bitfields are ' + overlapping_name + ' and ' +
+             overlapped + '.'),
+            BitfieldMap,
+            self.bitfield_definitions,
         )
 
         # Overlapping the upper index
         # ===========================
         overlapping_offset = overlapped_upper_bound_index - 1
 
+        self.bitfield_definitions[overlapping_name] = (
+            BitfieldDefinition(overlapping_offset, overlapping_bit_length))
+
         self.assertRaisesRegex(
             ValueError,
-            ('BitfieldMap.add_bitfield: Cannot create bitfield as the '
-             'requested range overlaps the ' + overlapped + ' bitfield.'),
-            self.bitfield_map.add_bitfield,
-            overlapping_name,
-            overlapping_offset,
-            overlapping_bit_length,
+            ('BitfieldMap: Overlapping bitfields. The overlapping '
+             'bitfields are ' + overlapping_name + ' and ' +
+             overlapped + '.'),
+            BitfieldMap,
+            self.bitfield_definitions,
         )
 
         # Overlapping a random bit in the bitfield
-        # =======================================
+        # ========================================
         overlapping_offset = (
             random.randrange(overlapped_offset, overlapped_upper_bound_index))
 
+        self.bitfield_definitions[overlapping_name] = (
+            BitfieldDefinition(overlapping_offset, overlapping_bit_length))
+
         self.assertRaisesRegex(
             ValueError,
-            ('BitfieldMap.add_bitfield: Cannot create bitfield as the '
-             'requested range overlaps the ' + overlapped + ' bitfield.'),
-            self.bitfield_map.add_bitfield,
-            overlapping_name,
-            overlapping_offset,
-            overlapping_bit_length,
+            ('BitfieldMap: Overlapping bitfields. The overlapping '
+             'bitfields are ' + overlapping_name + ' and ' +
+             overlapped + '.'),
+            BitfieldMap,
+            self.bitfield_definitions,
         )
 
-
-    def test_bitfield_offset(self):
-        ''' The `bitfield_offset` method on the `BitfieldMap` should return
-        the offset of the specified bitfield.
+    def test_bitfield_map_abutting_bitfields(self):
+        ''' It should be possible to add abutting bit fields. Ie it is not
+        necessary to have a gap between bitfields.
         '''
 
-        for bitfield in self.expected_bitfields.keys():
-            dut_offset = self.bitfield_map.bitfield_offset(bitfield)
-            expected_offset = self.expected_bitfields[bitfield]['offset']
+        bitfield_definitions = {}
 
-            assert(dut_offset == expected_offset)
+        offset = 0
 
-    def test_bitfield_bit_length(self):
-        ''' The `bitfield_bit_length` method on the `BitfieldMap` should
-        return the bit length of the specified bitfield.
-        '''
+        for n in range(4):
+            name = random_string_generator(random.randrange(3, 12))
+            bit_length = random.randrange(1, 10)
 
-        for bitfield in self.expected_bitfields.keys():
-            dut_bit_length = self.bitfield_map.bitfield_bit_length(bitfield)
-            expected_bit_length = (
-                self.expected_bitfields[bitfield]['bit_length'])
+            bitfield_definitions[name] = (
+                BitfieldDefinition(offset, bit_length))
 
-            assert(dut_bit_length == expected_bit_length)
+            # Increase the offset by the bit length
+            offset += bit_length
 
-    def test_bitfield_upper_bound_index(self):
-        ''' The `bitfield_upper_bound_index` method on the `BitfieldMap`
-        should return the upper bound bit index within the data word assigned
-        to the specified bitfield.
-        '''
+        try:
+            # Create the bitfield map
+            BitfieldMap(bitfield_definitions)
 
-        for bitfield in self.expected_bitfields.keys():
-            dut_upper_bound_index = (
-                self.bitfield_map.bitfield_upper_bound_index(bitfield))
-            expected_upper_bound_index = (
-                self.expected_bitfields[bitfield]['offset'] +
-                self.expected_bitfields[bitfield]['bit_length'])
-
-            assert(dut_upper_bound_index == expected_upper_bound_index)
+        except:
+            self.fail("Exception raised")
 
     def test_n_bitfields(self):
         ''' The `n_bitfields` property on the `BitfieldMap` should return the
@@ -217,6 +254,9 @@ class TestBitfieldMap(KeaTestCase):
         dut_names = self.bitfield_map.bitfield_names
         expected_names = list(self.expected_bitfields.keys())
 
+        dut_names.sort()
+        expected_names.sort()
+
         assert(dut_names == expected_names)
 
     def test_data_word_bit_length(self):
@@ -230,7 +270,12 @@ class TestBitfieldMap(KeaTestCase):
                 self.expected_bitfields[bitfield]['offset'] +
                 self.expected_bitfields[bitfield]['bit_length'])
 
-        expected_bit_length = max(bitfield_upper_bounds)
+        if len(self.expected_bitfields) > 0:
+            expected_bit_length = max(bitfield_upper_bounds)
+
+        else:
+            expected_bit_length = 0
+
         dut_data_word_bit_length = self.bitfield_map.data_word_bit_length
 
         assert(dut_data_word_bit_length == expected_bit_length)
@@ -249,26 +294,6 @@ class TestBitfieldMap(KeaTestCase):
 
         assert(dut_n_assigned_bits == expected_n_assigned_bits)
 
-    def test_abutting_bitfields(self):
-        ''' It should be possible to add abutting bit fields. Ie it is not
-        necessary to have a gap between bitfields.
-        '''
-
-        offset = self.bitfield_map.data_word_bit_length
-
-        for n in range(4):
-            name = random_string_generator(random.randrange(3, 12))
-            bit_length = random.randrange(1, 10)
-
-            try:
-                # Add the bitfield in the next free index
-                self.bitfield_map.add_bitfield(name, offset, bit_length)
-            except:
-                self.fail("Exception raised")
-
-            # Increase the offset by the bit length
-            offset += bit_length
-
     def test_pack_invalid_bitfield_values(self):
         ''' The `pack` method on the `BitfieldMap` should raise an error if
         the `bitfield_values` argument is not a `dict`.
@@ -278,7 +303,7 @@ class TestBitfieldMap(KeaTestCase):
 
         self.assertRaisesRegex(
             TypeError,
-            ('BitfieldMap.pack: bitfield_values should be a dictionary.'),
+            ('BitfieldMap: bitfield_values should be a dictionary.'),
             self.bitfield_map.pack,
             bitfield_values,
         )
@@ -289,75 +314,30 @@ class TestBitfieldMap(KeaTestCase):
         doesn't exist.
         '''
 
-        bitfield_values = generate_random_bitfield_values(self.bitfield_map)
-
-        # Select a random bitfield to give an invalid name
-        bitfield_to_invalidate = random.choice(list(bitfield_values.keys()))
         invalid_name = random_string_generator(4)
 
-        # Replace a valid name with an invalid name
-        bitfield_values[invalid_name] = (
-            bitfield_values.pop(bitfield_to_invalidate))
+        if len(self.expected_bitfields) > 0:
+            bitfield_values = (
+                generate_random_bitfield_values(self.bitfield_map))
+
+            # Select a random bitfield to give an invalid name
+            bitfield_to_invalidate = (
+                random.choice(list(bitfield_values.keys())))
+
+            # Replace a valid name with an invalid name
+            bitfield_values[invalid_name] = (
+                bitfield_values.pop(bitfield_to_invalidate))
+
+        else:
+            bitfield_values = {
+                invalid_name: random.randrange(0, 100)
+            }
 
         self.assertRaisesRegex(
             ValueError,
-            ('BitfieldMap.pack: bitfield_values contains a value for '
-             'a bitfield which is not included in this map. The '
-             'invalid bitfield is ' + invalid_name + '.'),
-            self.bitfield_map.pack,
-            bitfield_values,
-        )
-
-    def test_pack_negative_value(self):
-        ''' The `pack` method on the `BitfieldMap` should raise an error if
-        the `bitfield_values` argument contains a value which is negative.
-        '''
-
-        bitfield_values = generate_random_bitfield_values(self.bitfield_map)
-
-        # Select a random bitfield to give a negative number
-        bitfield_to_invalidate = random.choice(list(bitfield_values.keys()))
-        invalid_val = random.randrange(-100, 0)
-
-        # Give one bitfield an invalid value
-        bitfield_values[bitfield_to_invalidate] = invalid_val
-
-        self.assertRaisesRegex(
-            ValueError,
-            ('BitfieldMap.pack: All bitfield values must be greater '
-             'than 0. The specified value for the ' + bitfield_to_invalidate +
-             ' bitfield is ' + str(invalid_val) + '.'),
-            self.bitfield_map.pack,
-            bitfield_values,
-        )
-
-    def test_pack_invalid_value(self):
-        ''' The `pack` method on the `BitfieldMap` should raise an error if
-        the `bitfield_values` argument contains a value which is too large for
-        the bitfield length.
-        '''
-
-        bitfield_values = generate_random_bitfield_values(self.bitfield_map)
-
-        # Select a random bitfield to give a negative number
-        bitfield_to_invalidate = random.choice(list(bitfield_values.keys()))
-        bitfield_to_invalidate_val_upper_bound = (
-            2**self.expected_bitfields[bitfield_to_invalidate]['bit_length'])
-        invalid_val = (
-            random.randrange(
-                bitfield_to_invalidate_val_upper_bound,
-                bitfield_to_invalidate_val_upper_bound+100))
-
-        # Give one bitfield an invalid value
-        bitfield_values[bitfield_to_invalidate] = invalid_val
-
-        self.assertRaisesRegex(
-            ValueError,
-            ('BitfieldMap.pack: The value specified for the ' +
-             bitfield_to_invalidate + ' bitfield is too large. The specified '
-             'value is ' + str(invalid_val) + ' but the upper bound on '
-             'the value for this bitfield is ' +
-             str(bitfield_to_invalidate_val_upper_bound) + '.'),
+            ('BitfieldMap: bitfield_values contains a value for a bitfield '
+             'which is not included in this map. The invalid bitfield is ' +
+             invalid_name + '.'),
             self.bitfield_map.pack,
             bitfield_values,
         )
@@ -420,3 +400,49 @@ class TestBitfieldMap(KeaTestCase):
                 self.expected_bitfields[bitfield]['offset'])
 
         assert(dut_packed_word == expected_packed_word)
+
+    def test_bitfield_invalid_bitfield_name(self):
+        ''' The `bitfield` method on the `BitfieldMap` should raise an error
+        if the `bitfield_name` does not exist in the `BitfieldMap`.
+        '''
+
+        invalid_name = random_string_generator(4)
+
+        self.assertRaisesRegex(
+            ValueError,
+            ('BitfieldMap: The requested bitfield is not included in this '
+             'map'),
+            self.bitfield_map.bitfield,
+            invalid_name,
+        )
+
+    def test_bitfield(self):
+        ''' The `bitfield` method on the `BitfieldMap` should return the
+        `BitfieldDefinition` specified by `bitfield_name`.
+        '''
+
+        for bitfield_name in self.expected_bitfields.keys():
+            bitfield = self.bitfield_map.bitfield(bitfield_name)
+
+            dut_offset = bitfield.offset
+            expected_offset = self.expected_bitfields[bitfield_name]['offset']
+
+            assert(dut_offset == expected_offset)
+
+            dut_bit_length = bitfield.bit_length
+            expected_bit_length = (
+                self.expected_bitfields[bitfield_name]['bit_length'])
+
+            assert(dut_bit_length == expected_bit_length)
+
+class TestBitfieldMapNBitfields(BitfieldMapSimulationMixIn, KeaTestCase):
+    n_available_bits = 64
+    n_bitfields = 8
+
+class TestBitfieldMapOneBitfield(BitfieldMapSimulationMixIn, KeaTestCase):
+    n_available_bits = 32
+    n_bitfields = 1
+
+class TestBitfieldMapZeroBitfields(BitfieldMapSimulationMixIn, KeaTestCase):
+    n_available_bits = 32
+    n_bitfields = 0
