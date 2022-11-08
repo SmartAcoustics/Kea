@@ -406,6 +406,36 @@ class BitfieldMapSimulationMixIn(object):
 
         assert(dut_packed_word == expected_packed_word)
 
+    def test_unpack(self):
+        ''' The `unpack` method on the `BitfieldMap` should extract the values
+        from each bitfield in the word and return the values in a dict with
+        the bitfield names as the keys.
+        '''
+
+        word = random.randrange(2**self.bitfield_map.data_word_bit_length)
+
+        dut_unpacked_values = self.bitfield_map.unpack(word)
+
+        # Check the DUT unpacked values contains all the bitfields
+        assert(dut_unpacked_values.keys() == self.expected_bitfields.keys())
+
+        for bitfield_name in self.expected_bitfields.keys():
+            # Extract the expected offset and bit length for each bitfield
+            offset = self.expected_bitfields[bitfield_name]['offset']
+            bit_length = self.expected_bitfields[bitfield_name]['bit_length']
+
+            # Create a mask to remove all other bitfields
+            mask = 2**bit_length-1
+
+            # Shift the word and mask out the other bitfields to get the
+            # bitfield value
+            expected_unpacked_bitfield = (word >> offset) & mask
+
+            # Check the DUT unpacked values are correct
+            assert(
+                dut_unpacked_values[bitfield_name] ==
+                expected_unpacked_bitfield)
+
     def test_bitfield_invalid_bitfield_name(self):
         ''' The `bitfield` method on the `BitfieldMap` should raise an error
         if the `bitfield_name` does not exist in the `BitfieldMap`.

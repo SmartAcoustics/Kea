@@ -84,6 +84,20 @@ class BitfieldMap(object):
 
         return packed_word
 
+    def unpack(self, word):
+        ''' Unpacks all bitfield values from `word` and returns the values in
+        a dict.
+        '''
+
+        unpacked_values = {}
+
+        for bitfield_name in self.bitfield_names:
+            # Go through each bitfield and unpack the word
+            bitfield = getattr(self, bitfield_name)
+            unpacked_values[bitfield_name] = bitfield.unpack(word)
+
+        return unpacked_values
+
     def bitfield(self, bitfield_name):
         ''' Returns the bitfield specified by bitfield_name.
         '''
