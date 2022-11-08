@@ -2,7 +2,7 @@ import random
 
 from kea.test_utils import KeaTestCase, random_string_generator
 
-from ._bitfield_definition import BitfieldDefinition
+from ._bitfield_definitions import UintBitfield, BoolBitfield
 from ._bitfield_map import BitfieldMap
 
 def random_bitfield_definitions(n_available_bits, n_bitfields):
@@ -31,7 +31,7 @@ def random_bitfield_definitions(n_available_bits, n_bitfields):
         # Create a random name for the bitfield
         bitfield_name = random_string_generator(random.randrange(6, 12))
 
-        if random.random() < 0.1:
+        if random.random() < 0.5:
             # Make it a 1 bit bitfield
             bit_length = 1
 
@@ -59,10 +59,16 @@ def random_bitfield_definitions(n_available_bits, n_bitfields):
     bitfield_definitions = {}
 
     for bitfield_name, bitfield_spec in expected_bitfields_items:
-        # Add each bitfield to the bitfield_definitions
-        bitfield_definitions[bitfield_name] = (
-            BitfieldDefinition(
-                bitfield_spec['offset'], bitfield_spec['bit_length']))
+        if bitfield_spec['bit_length'] == 1 and random.random() < 0.5:
+            # Add each bitfield to the bitfield_definitions
+            bitfield_definitions[bitfield_name] = (
+                BoolBitfield(bitfield_spec['offset']))
+
+        else:
+            # Add each bitfield to the bitfield_definitions
+            bitfield_definitions[bitfield_name] = (
+                UintBitfield(
+                    bitfield_spec['offset'], bitfield_spec['bit_length']))
 
     return bitfield_definitions, expected_bitfields
 
@@ -119,7 +125,7 @@ class BitfieldMapSimulationMixIn(object):
 
     def test_invalid_bitfield_definition(self):
         ''' The `BitfieldMap` should raise an error if any entry in the
-        `bitfield_definitions` is not a `BitfieldDefinition`.
+        `bitfield_definitions` is not a sub-class of `BitfieldDefinition`.
         '''
 
         if len(self.expected_bitfields) <= 0:
@@ -133,8 +139,8 @@ class BitfieldMapSimulationMixIn(object):
 
         self.assertRaisesRegex(
             TypeError,
-            ('BitfieldMap: Every element in bitfield_definitions '
-             'should be a BitfieldDefinition.'),
+            ('BitfieldMap: Every element in bitfield_definitions should be a '
+             'sub-class of BitfieldDefinition.'),
             BitfieldMap,
             self.bitfield_definitions,
         )
@@ -154,7 +160,7 @@ class BitfieldMapSimulationMixIn(object):
         overlapped_offset = self.expected_bitfields[overlapped]['offset']
         overlapped_bit_length = (
             self.expected_bitfields[overlapped]['bit_length'])
-        overlapped_upper_bound_index = (
+        overlapped_index_upper_bound = (
             overlapped_offset + overlapped_bit_length)
 
         overlapping_name = random_string_generator(random.randrange(3, 12))
@@ -166,7 +172,7 @@ class BitfieldMapSimulationMixIn(object):
         overlapping_offset = overlapped_offset
 
         self.bitfield_definitions[overlapping_name] = (
-            BitfieldDefinition(overlapping_offset, overlapping_bit_length))
+            UintBitfield(overlapping_offset, overlapping_bit_length))
 
         self.assertRaisesRegex(
             ValueError,
@@ -179,10 +185,10 @@ class BitfieldMapSimulationMixIn(object):
 
         # Overlapping the upper index
         # ===========================
-        overlapping_offset = overlapped_upper_bound_index - 1
+        overlapping_offset = overlapped_index_upper_bound - 1
 
         self.bitfield_definitions[overlapping_name] = (
-            BitfieldDefinition(overlapping_offset, overlapping_bit_length))
+            UintBitfield(overlapping_offset, overlapping_bit_length))
 
         self.assertRaisesRegex(
             ValueError,
@@ -196,10 +202,10 @@ class BitfieldMapSimulationMixIn(object):
         # Overlapping a random bit in the bitfield
         # ========================================
         overlapping_offset = (
-            random.randrange(overlapped_offset, overlapped_upper_bound_index))
+            random.randrange(overlapped_offset, overlapped_index_upper_bound))
 
         self.bitfield_definitions[overlapping_name] = (
-            BitfieldDefinition(overlapping_offset, overlapping_bit_length))
+            UintBitfield(overlapping_offset, overlapping_bit_length))
 
         self.assertRaisesRegex(
             ValueError,
@@ -223,8 +229,7 @@ class BitfieldMapSimulationMixIn(object):
             name = random_string_generator(random.randrange(3, 12))
             bit_length = random.randrange(1, 10)
 
-            bitfield_definitions[name] = (
-                BitfieldDefinition(offset, bit_length))
+            bitfield_definitions[name] = UintBitfield(offset, bit_length)
 
             # Increase the offset by the bit length
             offset += bit_length
@@ -418,7 +423,7 @@ class BitfieldMapSimulationMixIn(object):
 
     def test_bitfield(self):
         ''' The `bitfield` method on the `BitfieldMap` should return the
-        `BitfieldDefinition` specified by `bitfield_name`.
+        bitfield specified by `bitfield_name`.
         '''
 
         for bitfield_name in self.expected_bitfields.keys():

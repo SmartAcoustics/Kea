@@ -1,4 +1,4 @@
-from ._bitfield_definition import BitfieldDefinition
+from ._bitfield_definitions import BitfieldDefinition
 
 class BitfieldMap(object):
     ''' Define the bitfields within a data word.
@@ -18,10 +18,10 @@ class BitfieldMap(object):
 
             new_bitfield = bitfield_definitions[new_bitfield_name]
 
-            if not isinstance(new_bitfield, BitfieldDefinition):
+            if not issubclass(type(new_bitfield), BitfieldDefinition):
                 raise TypeError(
                     'BitfieldMap: Every element in bitfield_definitions '
-                    'should be a BitfieldDefinition.')
+                    'should be a sub-class of BitfieldDefinition.')
 
             for existing_bitfield_name in self._bitfield_names:
 
@@ -31,8 +31,8 @@ class BitfieldMap(object):
                     new_bitfield.offset,
                     existing_bitfield.offset)
                 lower_upper_bound = min(
-                    new_bitfield.upper_bound_index,
-                    existing_bitfield.upper_bound_index)
+                    new_bitfield.index_upper_bound,
+                    existing_bitfield.index_upper_bound)
 
                 # Check that the bitfield does not overlap with another
                 if len(range(higher_offset, lower_upper_bound)) > 0:
@@ -47,9 +47,9 @@ class BitfieldMap(object):
             # Keep a record of the bitfields
             self._bitfield_names.append(new_bitfield_name)
 
-            if new_bitfield.upper_bound_index > self._data_word_bit_length:
+            if new_bitfield.index_upper_bound > self._data_word_bit_length:
                 # Keep track of the length of the data word
-                self._data_word_bit_length = new_bitfield.upper_bound_index
+                self._data_word_bit_length = new_bitfield.index_upper_bound
 
             # Keep track of how many bits have been assigned to a bitfield
             self._n_assigned_bits += new_bitfield.bit_length
