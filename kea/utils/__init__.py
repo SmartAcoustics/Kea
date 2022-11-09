@@ -28,5 +28,6 @@ from ._pulse_generator import pulse_generator
 from ._watchdog import watchdog
 from ._combined_signal_assigner import combined_signal_assigner
 from ._signal_slicer import signal_slicer
+from ._synchronous_signal_slicer import synchronous_signal_slicer
 from ._ramp_towards import ramp_towards
 from ._equality_detector import equality_detector
