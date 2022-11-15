@@ -55,10 +55,11 @@ class BitfieldMap(object):
             self._n_assigned_bits += new_bitfield.bit_length
 
     def pack(self, bitfield_values):
-        ''' Packs the values provided by the bitfield_values dict in to their
-        respective bitfields and returns the resultant data word.
+        ''' Packs all bitfields in to their respective bitfields and returns
+        the resultant data word.
 
-        Any bitfields not included in bitfield_values will have a value of 0.
+        Any bitfields not included in bitfield_values will contain the default
+        value for that bitfield.
 
         Note: the bitfield_values dict can contain any arbitrary subset of
         bitfields that are in this map.
@@ -68,8 +69,6 @@ class BitfieldMap(object):
             raise TypeError(
                 'BitfieldMap: bitfield_values should be a dictionary.')
 
-        packed_word = 0
-
         for bitfield_name in bitfield_values.keys():
             if bitfield_name not in self._bitfield_names:
                 raise ValueError(
@@ -77,10 +76,20 @@ class BitfieldMap(object):
                     'bitfield which is not included in this map. The invalid '
                     'bitfield is ' + bitfield_name + '.')
 
+        packed_word = 0
+
+        for bitfield_name in self._bitfield_names:
+
             bitfield = getattr(self, bitfield_name)
 
-            # Shift the value into the correct position in the packed_word
-            packed_word |= bitfield.pack(bitfield_values[bitfield_name])
+            if bitfield_name in bitfield_values.keys():
+                # Shift the value into the correct position in the packed_word
+                packed_word |= bitfield.pack(bitfield_values[bitfield_name])
+
+            else:
+                # No value has been specified for this bitfield so use the
+                # default.
+                packed_word |= bitfield.pack_default
 
         return packed_word
 

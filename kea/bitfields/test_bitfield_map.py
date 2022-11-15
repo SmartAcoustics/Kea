@@ -46,9 +46,16 @@ def random_bitfield_definitions(n_available_bits, n_bitfields):
             # before the next offset
             bit_length = random.randrange(1, gap + 1)
 
+        if random.random() < 0.5:
+            # Give the bitfield a random value
+            default_value = random.randrange(2**bit_length)
+        else:
+            default_value = 0
+
         expected_bitfields[bitfield_name] = {
             'offset': offsets[n],
             'bit_length': bit_length,
+            'default_value': default_value
         }
 
     # Extract the expected_bitfields into a list of tuples and then shuffle
@@ -62,13 +69,17 @@ def random_bitfield_definitions(n_available_bits, n_bitfields):
         if bitfield_spec['bit_length'] == 1 and random.random() < 0.5:
             # Add each bitfield to the bitfield_definitions
             bitfield_definitions[bitfield_name] = (
-                BoolBitfield(bitfield_spec['offset']))
+                BoolBitfield(
+                    bitfield_spec['offset'],
+                    bitfield_spec['default_value']))
 
         else:
             # Add each bitfield to the bitfield_definitions
             bitfield_definitions[bitfield_name] = (
                 UintBitfield(
-                    bitfield_spec['offset'], bitfield_spec['bit_length']))
+                    bitfield_spec['offset'],
+                    bitfield_spec['bit_length'],
+                    bitfield_spec['default_value']))
 
     return bitfield_definitions, expected_bitfields
 
@@ -363,10 +374,17 @@ class BitfieldMapSimulationMixIn(object):
         dut_packed_word = self.bitfield_map.pack(bitfield_values)
 
         expected_packed_word = 0
-        for bitfield in bitfield_values.keys():
-            expected_packed_word |= (
-                bitfield_values[bitfield] <<
-                self.expected_bitfields[bitfield]['offset'])
+
+        for bitfield in self.expected_bitfields.keys():
+            if bitfield in bitfield_values:
+                expected_packed_word |= (
+                    bitfield_values[bitfield] <<
+                    self.expected_bitfields[bitfield]['offset'])
+
+            else:
+                expected_packed_word |= (
+                    self.expected_bitfields[bitfield]['default_value'] <<
+                    self.expected_bitfields[bitfield]['offset'])
 
         assert(dut_packed_word == expected_packed_word)
 
@@ -381,10 +399,17 @@ class BitfieldMapSimulationMixIn(object):
         dut_packed_word = self.bitfield_map.pack(bitfield_values)
 
         expected_packed_word = 0
-        for bitfield in bitfield_values.keys():
-            expected_packed_word |= (
-                bitfield_values[bitfield] <<
-                self.expected_bitfields[bitfield]['offset'])
+
+        for bitfield in self.expected_bitfields.keys():
+            if bitfield in bitfield_values:
+                expected_packed_word |= (
+                    bitfield_values[bitfield] <<
+                    self.expected_bitfields[bitfield]['offset'])
+
+            else:
+                expected_packed_word |= (
+                    self.expected_bitfields[bitfield]['default_value'] <<
+                    self.expected_bitfields[bitfield]['offset'])
 
         assert(dut_packed_word == expected_packed_word)
 
@@ -399,10 +424,17 @@ class BitfieldMapSimulationMixIn(object):
         dut_packed_word = self.bitfield_map.pack(bitfield_values)
 
         expected_packed_word = 0
-        for bitfield in bitfield_values.keys():
-            expected_packed_word |= (
-                bitfield_values[bitfield] <<
-                self.expected_bitfields[bitfield]['offset'])
+
+        for bitfield in self.expected_bitfields.keys():
+            if bitfield in bitfield_values:
+                expected_packed_word |= (
+                    bitfield_values[bitfield] <<
+                    self.expected_bitfields[bitfield]['offset'])
+
+            else:
+                expected_packed_word |= (
+                    self.expected_bitfields[bitfield]['default_value'] <<
+                    self.expected_bitfields[bitfield]['offset'])
 
         assert(dut_packed_word == expected_packed_word)
 
