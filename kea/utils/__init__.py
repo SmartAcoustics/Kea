@@ -31,3 +31,4 @@ from ._signal_slicer import signal_slicer
 from ._synchronous_signal_slicer import synchronous_signal_slicer
 from ._ramp_towards import ramp_towards
 from ._equality_detector import equality_detector
+from .multiplexer import MultiplexerInputInterface, synchronous_multiplexer
