@@ -2,6 +2,7 @@ import random
 
 from kea.test_utils import KeaTestCase
 
+from .utils import VALID_BOOLEAN_VALUES
 from ._bitfield_definitions import (
     BitfieldDefinition, UintBitfield, BoolBitfield)
 
@@ -334,8 +335,6 @@ class TestBoolBitfield(KeaTestCase):
 
     def setUp(self):
 
-        self.valid_values = [True, False, 1, 0]
-
         self.args = {
             'offset': random.randrange(0, 129),
         }
@@ -366,7 +365,7 @@ class TestBoolBitfield(KeaTestCase):
         self.assertRaisesRegex(
             ValueError,
             ('BoolBitfield: default_value should be one of ' +
-             ', '.join([str(v) for v in self.valid_values]) + '.'),
+             ', '.join([str(v) for v in VALID_BOOLEAN_VALUES]) + '.'),
             BoolBitfield,
             **self.args,
         )
@@ -428,7 +427,7 @@ class TestBoolBitfield(KeaTestCase):
         self.assertRaisesRegex(
             ValueError,
             ('BoolBitfield: The value passed to pack should be one of ' +
-             ', '.join([str(v) for v in self.valid_values]) + '.'),
+             ', '.join([str(v) for v in VALID_BOOLEAN_VALUES]) + '.'),
             self.bool_bitfield.pack,
             value,
         )

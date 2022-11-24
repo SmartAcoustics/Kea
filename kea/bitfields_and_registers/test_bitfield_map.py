@@ -3,6 +3,8 @@ import random
 from kea.test_utils import KeaTestCase, random_string_generator
 
 from ._bitfield_definitions import UintBitfield, BoolBitfield
+from ._constant_bitfield_definitions import (
+    ConstantUintBitfield, ConstantBoolBitfield)
 from ._bitfield_map import BitfieldMap
 
 def random_bitfield_definitions(n_available_bits, n_bitfields):
@@ -31,32 +33,54 @@ def random_bitfield_definitions(n_available_bits, n_bitfields):
         # Create a random name for the bitfield
         bitfield_name = random_string_generator(random.randrange(6, 12))
 
+        expected_bitfields[bitfield_name] = {}
+
         if random.random() < 0.5:
-            # Make it a 1 bit bitfield
-            bit_length = 1
+            # Make it a boolean bitfield
+            expected_bitfields[bitfield_name]['type'] = 'bool'
+            expected_bitfields[bitfield_name]['bit_length'] = 1
 
         else:
-            # Determine the number of bits available before the next offset
-            if n == n_bitfields-1:
-                gap = n_available_bits - offsets[n]
-            else:
-                gap = offsets[n+1] - offsets[n]
+            # Make is a uint bitfield
+            expected_bitfields[bitfield_name]['type'] = 'uint'
 
-            # Select a random bit length that can fit in the space available
-            # before the next offset
-            bit_length = random.randrange(1, gap + 1)
+            if random.random() < 0.1:
+                # Make a small number of uint bitfields 1 bit long
+                bit_length = 1
+
+            else:
+                # Determine the number of bits available before the next
+                # offset
+                if n == n_bitfields-1:
+                    gap = n_available_bits - offsets[n]
+                else:
+                    gap = offsets[n+1] - offsets[n]
+
+                # Select a random bit length that can fit in the space
+                # available before the next offset
+                bit_length = random.randrange(1, gap + 1)
+
+            # Add the bitlength
+            expected_bitfields[bitfield_name]['bit_length'] = bit_length
 
         if random.random() < 0.5:
             # Give the bitfield a random value
-            default_value = random.randrange(2**bit_length)
+            val = random.randrange(
+                2**expected_bitfields[bitfield_name]['bit_length'])
         else:
-            default_value = 0
+            val = 0
 
-        expected_bitfields[bitfield_name] = {
-            'offset': offsets[n],
-            'bit_length': bit_length,
-            'default_value': default_value
-        }
+        if random.random() < 0.5:
+            # Make it a constant bitfield
+            expected_bitfields[bitfield_name]['constant'] = True
+            expected_bitfields[bitfield_name]['value'] = val
+        else:
+            # Make it a variable bitfield
+            expected_bitfields[bitfield_name]['constant'] = False
+            expected_bitfields[bitfield_name]['default_value'] = val
+
+        # Add the offset
+        expected_bitfields[bitfield_name]['offset'] = offsets[n]
 
     # Extract the expected_bitfields into a list of tuples and then shuffle
     # the order.
@@ -66,20 +90,37 @@ def random_bitfield_definitions(n_available_bits, n_bitfields):
     bitfield_definitions = {}
 
     for bitfield_name, bitfield_spec in expected_bitfields_items:
-        if bitfield_spec['bit_length'] == 1 and random.random() < 0.5:
-            # Add each bitfield to the bitfield_definitions
-            bitfield_definitions[bitfield_name] = (
-                BoolBitfield(
-                    bitfield_spec['offset'],
-                    bitfield_spec['default_value']))
+        if bitfield_spec['constant']:
+            if bitfield_spec['type'] == 'bool':
+                bitfield_definitions[bitfield_name] = (
+                    ConstantBoolBitfield(
+                        bitfield_spec['offset'],
+                        bitfield_spec['value']))
 
+            elif bitfield_spec['type'] == 'uint':
+                bitfield_definitions[bitfield_name] = (
+                    ConstantUintBitfield(
+                        bitfield_spec['offset'],
+                        bitfield_spec['bit_length'],
+                        bitfield_spec['value']))
+            else:
+                raise TypeError('Unrecognized type')
         else:
-            # Add each bitfield to the bitfield_definitions
-            bitfield_definitions[bitfield_name] = (
-                UintBitfield(
-                    bitfield_spec['offset'],
-                    bitfield_spec['bit_length'],
-                    bitfield_spec['default_value']))
+            if bitfield_spec['type'] == 'bool':
+                bitfield_definitions[bitfield_name] = (
+                    BoolBitfield(
+                        bitfield_spec['offset'],
+                        bitfield_spec['default_value']))
+
+            elif bitfield_spec['type'] == 'uint':
+                bitfield_definitions[bitfield_name] = (
+                    UintBitfield(
+                        bitfield_spec['offset'],
+                        bitfield_spec['bit_length'],
+                        bitfield_spec['default_value']))
+
+            else:
+                raise TypeError('Unrecognized type')
 
     return bitfield_definitions, expected_bitfields
 
@@ -87,15 +128,20 @@ def generate_random_bitfield_values(bitfield_map, n_bitfields=None):
     ''' Generates random and valid bitfield values for BitfieldMap.pack().
     '''
 
-    if bitfield_map.n_bitfields <= 0:
-        # There are no bitfields in the bitfield map so return an empty dict
+    variable_bitfields = bitfield_map.variable_bitfield_names
+    n_variable_bitfields = len(bitfield_map.variable_bitfield_names)
+
+    if n_variable_bitfields <= 0:
+        # There are no variable bitfields in the bitfield map so return an
+        # empty dict
         return {}
 
     if n_bitfields is None:
         # Pick a random selection of bitfields to receive a value
-        n_bitfields = random.randrange(1, bitfield_map.n_bitfields+1)
+        n_bitfields = random.randrange(1, n_variable_bitfields+1)
 
-    bitfields = random.sample(bitfield_map.bitfield_names, n_bitfields)
+    # Pick a random selection of bitfields to get a value
+    bitfields = random.sample(variable_bitfields, n_bitfields)
 
     bitfield_values = {}
 
@@ -108,6 +154,38 @@ def generate_random_bitfield_values(bitfield_map, n_bitfields=None):
         bitfield_values[bitfield_name] = val
 
     return bitfield_values
+
+def generate_expected_packed_word(expected_bitfields, bitfield_values):
+    ''' Generates the expected packed word based on `expected_bitfields` and
+    `bitfield_values`
+
+    `expected_bitfields` should be the output from
+    `random_bitfield_definitions`
+
+    `bitfield_values` should be the output from
+    `generate_random_bitfield_values`
+    '''
+
+    expected_packed_word = 0
+
+    for bitfield in expected_bitfields.keys():
+        if bitfield in bitfield_values:
+            expected_packed_word |= (
+                bitfield_values[bitfield] <<
+                expected_bitfields[bitfield]['offset'])
+
+        else:
+            if expected_bitfields[bitfield]['constant']:
+                expected_packed_word |= (
+                    expected_bitfields[bitfield]['value'] <<
+                    expected_bitfields[bitfield]['offset'])
+
+            else:
+                expected_packed_word |= (
+                    expected_bitfields[bitfield]['default_value'] <<
+                    expected_bitfields[bitfield]['offset'])
+
+    return expected_packed_word
 
 class BitfieldMapSimulationMixIn(object):
 
@@ -150,8 +228,8 @@ class BitfieldMapSimulationMixIn(object):
 
         self.assertRaisesRegex(
             TypeError,
-            ('BitfieldMap: Every element in bitfield_definitions should be a '
-             'sub-class of BitfieldDefinition.'),
+            ('BitfieldMap: Bitfield should be a sub-class of '
+            'BitfieldDefinition or ConstantBitfieldDefinition.'),
             BitfieldMap,
             self.bitfield_definitions,
         )
@@ -275,6 +353,40 @@ class BitfieldMapSimulationMixIn(object):
 
         assert(dut_names == expected_names)
 
+    def test_constant_bitfield_names(self):
+        ''' The `constant_bitfield_names` property on the `BitfieldMap` should
+        return a list containing the names of all the constant bitfields in
+        the map.
+        '''
+
+        dut_names = self.bitfield_map.constant_bitfield_names
+        expected_names = []
+        for bitfield_name in self.expected_bitfields.keys():
+            if self.expected_bitfields[bitfield_name]['constant']:
+                expected_names.append(bitfield_name)
+
+        dut_names.sort()
+        expected_names.sort()
+
+        assert(dut_names == expected_names)
+
+    def test_variable_bitfield_names(self):
+        ''' The `variable_bitfield_names` property on the `BitfieldMap` should
+        return a list containing the names of all the variable bitfields in
+        the map.
+        '''
+
+        dut_names = self.bitfield_map.variable_bitfield_names
+        expected_names = []
+        for bitfield_name in self.expected_bitfields.keys():
+            if not self.expected_bitfields[bitfield_name]['constant']:
+                expected_names.append(bitfield_name)
+
+        dut_names.sort()
+        expected_names.sort()
+
+        assert(dut_names == expected_names)
+
     def test_data_word_bit_length(self):
         ''' The `data_word_bit_length` property on the `BitfieldMap` should
         return the number of bits required by the full set of bitfields.
@@ -332,22 +444,9 @@ class BitfieldMapSimulationMixIn(object):
 
         invalid_name = random_string_generator(4)
 
-        if len(self.expected_bitfields) > 0:
-            bitfield_values = (
-                generate_random_bitfield_values(self.bitfield_map))
+        bitfield_values = generate_random_bitfield_values(self.bitfield_map)
 
-            # Select a random bitfield to give an invalid name
-            bitfield_to_invalidate = (
-                random.choice(list(bitfield_values.keys())))
-
-            # Replace a valid name with an invalid name
-            bitfield_values[invalid_name] = (
-                bitfield_values.pop(bitfield_to_invalidate))
-
-        else:
-            bitfield_values = {
-                invalid_name: random.randrange(0, 100)
-            }
+        bitfield_values[invalid_name] = random.randrange(0, 100)
 
         self.assertRaisesRegex(
             ValueError,
@@ -358,33 +457,59 @@ class BitfieldMapSimulationMixIn(object):
             bitfield_values,
         )
 
-    def test_pack_all_bitfields(self):
+    def test_pack_constant_bitfield(self):
+        ''' The `pack` method on the `BitfieldMap` should raise an error if
+        the `bitfield_values` argument contains a value for a constant
+        bitfield.
+        '''
+
+        if len(self.bitfield_map.constant_bitfield_names) <= 0:
+            # There are no constants in the bitfield map so we can't run this
+            # test
+            return True
+
+        invalid_name = (
+            random.choice(self.bitfield_map.constant_bitfield_names))
+
+        bitfield_values = generate_random_bitfield_values(self.bitfield_map)
+
+        bitfield_values[invalid_name] = random.randrange(0, 100)
+
+        self.assertRaisesRegex(
+            ValueError,
+            ('BitfieldMap: bitfield_values contains a value for a bitfield '
+             'which is a constant and so cannot be set.'),
+            self.bitfield_map.pack,
+            bitfield_values,
+        )
+
+    def test_pack_all_variable_bitfields(self):
         ''' The `pack` method on the `BitfieldMap` should pack all values in
         the `bitfield_values` argument into their assigned bitfields and then
         return the resultant word.
 
-        Any bitfields not included in bitfield_values should have a value of
-        0.
+        The `pack` method will raise an error if `bitfield_values` contains
+        a value for a constant bitfield.
+
+        Any constant bitfields will be included in the resultant word with
+        their constant value at the correct offset.
+
+        Any variable bitfields not included in bitfield_values should be
+        included in the resultant word with their default value at the correct
+        offset.
         '''
+
+        n_variable_bitfields = len(self.bitfield_map.variable_bitfield_names)
 
         bitfield_values = (
             generate_random_bitfield_values(
-                self.bitfield_map, n_bitfields=self.bitfield_map.n_bitfields))
+                self.bitfield_map, n_bitfields=n_variable_bitfields))
 
         dut_packed_word = self.bitfield_map.pack(bitfield_values)
 
-        expected_packed_word = 0
-
-        for bitfield in self.expected_bitfields.keys():
-            if bitfield in bitfield_values:
-                expected_packed_word |= (
-                    bitfield_values[bitfield] <<
-                    self.expected_bitfields[bitfield]['offset'])
-
-            else:
-                expected_packed_word |= (
-                    self.expected_bitfields[bitfield]['default_value'] <<
-                    self.expected_bitfields[bitfield]['offset'])
+        expected_packed_word = (
+            generate_expected_packed_word(
+                self.expected_bitfields, bitfield_values))
 
         assert(dut_packed_word == expected_packed_word)
 
@@ -398,18 +523,9 @@ class BitfieldMapSimulationMixIn(object):
 
         dut_packed_word = self.bitfield_map.pack(bitfield_values)
 
-        expected_packed_word = 0
-
-        for bitfield in self.expected_bitfields.keys():
-            if bitfield in bitfield_values:
-                expected_packed_word |= (
-                    bitfield_values[bitfield] <<
-                    self.expected_bitfields[bitfield]['offset'])
-
-            else:
-                expected_packed_word |= (
-                    self.expected_bitfields[bitfield]['default_value'] <<
-                    self.expected_bitfields[bitfield]['offset'])
+        expected_packed_word = (
+            generate_expected_packed_word(
+                self.expected_bitfields, bitfield_values))
 
         assert(dut_packed_word == expected_packed_word)
 
@@ -423,18 +539,9 @@ class BitfieldMapSimulationMixIn(object):
 
         dut_packed_word = self.bitfield_map.pack(bitfield_values)
 
-        expected_packed_word = 0
-
-        for bitfield in self.expected_bitfields.keys():
-            if bitfield in bitfield_values:
-                expected_packed_word |= (
-                    bitfield_values[bitfield] <<
-                    self.expected_bitfields[bitfield]['offset'])
-
-            else:
-                expected_packed_word |= (
-                    self.expected_bitfields[bitfield]['default_value'] <<
-                    self.expected_bitfields[bitfield]['offset'])
+        expected_packed_word = (
+            generate_expected_packed_word(
+                self.expected_bitfields, bitfield_values))
 
         assert(dut_packed_word == expected_packed_word)
 
@@ -504,7 +611,7 @@ class BitfieldMapSimulationMixIn(object):
 
 class TestBitfieldMapNBitfields(BitfieldMapSimulationMixIn, KeaTestCase):
     n_available_bits = 64
-    n_bitfields = 8
+    n_bitfields = 32
 
 class TestBitfieldMapOneBitfield(BitfieldMapSimulationMixIn, KeaTestCase):
     n_available_bits = 32

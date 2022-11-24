@@ -2,6 +2,8 @@ import copy
 
 from abc import ABC, abstractmethod
 
+from .utils import VALID_BOOLEAN_VALUES
+
 class BitfieldDefinition(ABC):
     ''' An abstact base class specifying the requirements for bitfield
     definitions.
@@ -84,21 +86,23 @@ class UintBitfield(BitfieldDefinition):
                         'UintBitfield: restricted_values should not require '
                         'more bits than the requested bit_length.')
 
-        self._bitfield = range(offset, offset + bit_length)
+        self._offset = offset
+        self._bit_length = bit_length
+        self._index_upper_bound = offset + bit_length
         self._default_value = default_value
         self._restricted_values = copy.deepcopy(restricted_values)
 
     @property
     def offset(self):
-        return self._bitfield.start
+        return self._offset
 
     @property
     def bit_length(self):
-        return len(self._bitfield)
+        return self._bit_length
 
     @property
     def index_upper_bound(self):
-        return self._bitfield.stop
+        return self._index_upper_bound
 
     @property
     def default_value(self):
@@ -161,15 +165,14 @@ class BoolBitfield(BitfieldDefinition):
         if offset < 0:
             raise ValueError('BoolBitfield: offset should not be negative.')
 
-        self._valid_values = [True, False, 1, 0]
-
-        if default_value not in self._valid_values:
+        if default_value not in VALID_BOOLEAN_VALUES:
             raise ValueError(
                 'BoolBitfield: default_value should be one of ' +
-                ', '.join([str(v) for v in self._valid_values]) + '.')
+                ', '.join([str(v) for v in VALID_BOOLEAN_VALUES]) + '.')
 
         self._offset = offset
         self._bit_length = 1
+        self._index_upper_bound = self._offset + self._bit_length
         self._default_value = default_value
 
     @property
@@ -182,7 +185,7 @@ class BoolBitfield(BitfieldDefinition):
 
     @property
     def index_upper_bound(self):
-        return self.offset + self.bit_length
+        return self._index_upper_bound
 
     @property
     def default_value(self):
@@ -200,10 +203,10 @@ class BoolBitfield(BitfieldDefinition):
         ''' Checks the value is valid and packs it in to the correct offset.
         '''
 
-        if value not in self._valid_values:
+        if value not in VALID_BOOLEAN_VALUES:
             raise ValueError(
                 'BoolBitfield: The value passed to pack should be one of ' +
-                ', '.join([str(v) for v in self._valid_values]) + '.')
+                ', '.join([str(v) for v in VALID_BOOLEAN_VALUES]) + '.')
 
         packed_value = value << self.offset
 
