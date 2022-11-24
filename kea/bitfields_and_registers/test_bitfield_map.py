@@ -387,9 +387,9 @@ class BitfieldMapSimulationMixIn(object):
 
         assert(dut_names == expected_names)
 
-    def test_data_word_bit_length(self):
-        ''' The `data_word_bit_length` property on the `BitfieldMap` should
-        return the number of bits required by the full set of bitfields.
+    def test_bit_length(self):
+        ''' The `bit_length` property on the `BitfieldMap` should return the
+        number of bits required by the full set of bitfields.
         '''
 
         bitfield_upper_bounds = []
@@ -404,9 +404,9 @@ class BitfieldMapSimulationMixIn(object):
         else:
             expected_bit_length = 0
 
-        dut_data_word_bit_length = self.bitfield_map.data_word_bit_length
+        dut_bit_length = self.bitfield_map.bit_length
 
-        assert(dut_data_word_bit_length == expected_bit_length)
+        assert(dut_bit_length == expected_bit_length)
 
     def test_n_assigned_bits(self):
         ''' The `n_assigned_bits` property on the `BitfieldMap` should return
@@ -551,7 +551,7 @@ class BitfieldMapSimulationMixIn(object):
         the bitfield names as the keys.
         '''
 
-        word = random.randrange(2**self.bitfield_map.data_word_bit_length)
+        word = random.randrange(2**self.bitfield_map.bit_length)
 
         dut_unpacked_values = self.bitfield_map.unpack(word)
 

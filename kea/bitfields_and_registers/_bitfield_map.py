@@ -49,7 +49,7 @@ class BitfieldMap(object):
 
         self._constant_bitfield_names = []
         self._variable_bitfield_names = []
-        self._data_word_bit_length = 0
+        self._bit_length = 0
         self._n_assigned_bits = 0
 
         for new_bitfield_name in bitfield_definitions:
@@ -92,9 +92,9 @@ class BitfieldMap(object):
                     'BitfieldMap: This error should never occur as the '
                     'bitfield type should be checked above.')
 
-            if new_bitfield.index_upper_bound > self._data_word_bit_length:
+            if new_bitfield.index_upper_bound > self._bit_length:
                 # Keep track of the length of the data word
-                self._data_word_bit_length = new_bitfield.index_upper_bound
+                self._bit_length = new_bitfield.index_upper_bound
 
             # Keep track of how many bits have been assigned to a bitfield
             self._n_assigned_bits += new_bitfield.bit_length
@@ -214,21 +214,20 @@ class BitfieldMap(object):
         return self._variable_bitfield_names
 
     @property
-    def data_word_bit_length(self):
-        ''' Returns the total bit length of the data word (which contains all
-        of the bitfields in this map).
+    def bit_length(self):
+        ''' Returns the total bit length of the bitmap.
         '''
-        return self._data_word_bit_length
+        return self._bit_length
 
     @property
     def n_assigned_bits(self):
         ''' The number of bits that have been assigned to bitfields.
 
-        If self.n_assigned_bits == self.data_word_bit_length then the data
-        word is been packed in the most efficient way and there are no gaps
-        between bitfields.
+        If self.n_assigned_bits == self.bit_length then the data word has been
+        packed in the most efficient way and there are no gaps between
+        bitfields.
 
-        If self.n_assigned_bits <= self.data_word_bit_length then there are
-        gaps between bitfields in the data word.
+        If self.n_assigned_bits <= self.bit_length then there are gaps between
+        bitfields.
         '''
         return self._n_assigned_bits
