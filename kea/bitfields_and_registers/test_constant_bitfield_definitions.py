@@ -3,7 +3,7 @@ import random
 from kea.test_utils import KeaTestCase
 
 from .utils import VALID_BOOLEAN_VALUES
-from ._constant_bitfield_definitions import (
+from .constant_bitfield_definitions import (
     ConstantBitfieldDefinition, ConstantUintBitfield, ConstantBoolBitfield)
 
 class TestConstantUintBitfield(KeaTestCase):

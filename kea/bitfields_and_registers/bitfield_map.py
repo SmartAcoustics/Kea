@@ -1,6 +1,6 @@
 from .utils import overlapping_ranges
-from ._bitfield_definitions import BitfieldDefinition
-from ._constant_bitfield_definitions import ConstantBitfieldDefinition
+from .bitfield_definitions import BitfieldDefinition
+from .constant_bitfield_definitions import ConstantBitfieldDefinition
 
 def valid_constant_bitfield(bitfield):
     ''' Returns True if bitfield is a valid constant bitfield.

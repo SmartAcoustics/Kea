@@ -1,11 +1,12 @@
 import random
+import unittest
 
 from kea.test_utils import KeaTestCase, random_string_generator
 
-from ._bitfield_definitions import UintBitfield, BoolBitfield
-from ._constant_bitfield_definitions import (
+from .bitfield_definitions import UintBitfield, BoolBitfield
+from .constant_bitfield_definitions import (
     ConstantUintBitfield, ConstantBoolBitfield)
-from ._bitfield_map import BitfieldMap
+from .bitfield_map import BitfieldMap
 
 def random_bitfield_definitions(n_available_bits, n_bitfields):
     ''' Generates a bitfield_definitions dict with `n_bitfields` which will
@@ -214,13 +215,9 @@ class BitfieldMapSimulationMixIn(object):
 
     def test_invalid_bitfield_definition(self):
         ''' The `BitfieldMap` should raise an error if any entry in the
-        `bitfield_definitions` is not a sub-class of `BitfieldDefinition`.
+        `bitfield_definitions` is not a sub-class of `BitfieldDefinition` or
+        `ConstantBitfieldDefinition`.
         '''
-
-        if len(self.expected_bitfields) <= 0:
-            # The bitfield map is being created with 0 bitfields so we cannot
-            # run this test.
-            return True
 
         # Pick a random bitfield and set it to the wrong type
         bitfield = random.choice(list(self.bitfield_definitions.keys()))
@@ -239,11 +236,6 @@ class BitfieldMapSimulationMixIn(object):
         error if the specified `offset` and `bit_length` overlap a bitfield
         which already exists.
         '''
-
-        if len(self.expected_bitfields) <= 0:
-            # The bitfield map is being created with 0 bitfields so we cannot
-            # run this test.
-            return True
 
         overlapped = random.choice(list(self.expected_bitfields.keys()))
         overlapped_offset = self.expected_bitfields[overlapped]['offset']
@@ -620,3 +612,11 @@ class TestBitfieldMapOneBitfield(BitfieldMapSimulationMixIn, KeaTestCase):
 class TestBitfieldMapZeroBitfields(BitfieldMapSimulationMixIn, KeaTestCase):
     n_available_bits = 32
     n_bitfields = 0
+
+    @unittest.skip("Cannot run this test with an empty bitfield defintions.")
+    def test_overlapping_bitfields():
+        pass
+
+    @unittest.skip("Cannot run this test with an empty bitfield defintions.")
+    def test_invalid_bitfield_definition():
+        pass
