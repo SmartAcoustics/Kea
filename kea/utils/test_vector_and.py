@@ -7,28 +7,34 @@ from kea.test_utils.base_test import (
 
 from ._vector_and import vector_and
 
+@block
+def vector_and_wrapper(clock, output, input_signals):
+
+    return vector_and(output, input_signals)
+
 def test_args_setup():
     ''' Generate the arguments and argument types for the DUT.
     '''
 
     clock = Signal(False)
-    result = Signal(False)
 
-    bitwidth = random.randrange(1, 256)
+    bitwidth = 8
+    n_input_signals = 8
 
-    input_signal = Signal(intbv(0)[bitwidth:])
-    output = Signal(False)
+    output = Signal(intbv(0)[bitwidth:])
+    input_signals = [
+        Signal(intbv(0)[bitwidth:]) for n in range(n_input_signals)]
 
     args = {
         'clock': clock,
         'output': output,
-        'input_signal': input_signal,
+        'input_signals': input_signals,
     }
 
     arg_types = {
         'clock': 'clock',
         'output': 'output',
-        'input_signal': 'custom',
+        'input_signals': 'custom',
     }
 
     return args, arg_types
@@ -39,26 +45,108 @@ class TestVectorAndInterface(KeaTestCase):
 
         self.args, _arg_types = test_args_setup()
 
-        del self.args['clock']
-
-    def test_invalid_output(self):
-        ''' The `vector_and` block should raise an error if the output is not
-        a boolean signal.
+    def test_zero_input_signals(self):
+        ''' The `vector_and` should raise an error if the `input_signals` list
+        is empty.
         '''
 
-        self.args['output'] = Signal(intbv(0)[5:0])
+        # Overwrite the chosen signal with an empty list
+        self.args['input_signals'] = []
 
         self.assertRaisesRegex(
             ValueError,
-            'vector_and: output must be a boolean signal',
-            vector_and,
-            **self.args,
+            ('vector_and: There should be at least one input signal.'),
+            vector_and_wrapper,
+            **self.args
         )
 
-@block
-def vector_and_wrapper(clock, output, input_signal):
+    def test_invalid_input_signal_bitwidth(self):
+        ''' The `vector_and` should raise an error if any signal in the
+        `input_signals` list is not the same bitwidth as the others.
+        '''
+        # Pick a random input signal to set to an invalid bitwidth
+        index = random.choice(range(len(self.args['input_signals'])))
 
-    return vector_and(output, input_signal)
+        # Pick a random invalid bitwidth
+        valid_bitwidth = len(self.args['input_signals'][0])
+        invalid_bitwidths = [n for n in range(1, 32) if n != valid_bitwidth]
+        invalid_bitwidth = random.choice(invalid_bitwidths)
+
+        # Overwrite the chosen signal with an invalid bitwidth
+        self.args['input_signals'][index] = (
+            Signal(intbv(0)[invalid_bitwidth:]))
+
+        self.assertRaisesRegex(
+            TypeError,
+            ('vector_and: All input signals should be the same bitwidth.'),
+            vector_and_wrapper,
+            **self.args
+        )
+
+    def test_boolean_input_signal(self):
+        ''' The `vector_and` should raise an error if any signal in the
+        `input_signals` list is a boolean.
+        '''
+
+        # Overwrite the input and output signals with 1 bit wide signals
+        n_input_signals = 8
+        self.args['input_signals'] = [
+            Signal(intbv(0)[1:]) for n in range(n_input_signals)]
+        self.args['output'] = Signal(intbv(0)[1:])
+
+        # Pick a random input signal to set to an invalid bitwidth
+        index = random.choice(range(len(self.args['input_signals'])))
+
+        # Overwrite the chosen signal with a boolean
+        self.args['input_signals'][index] = Signal(False)
+
+        self.assertRaisesRegex(
+            TypeError,
+            ('vector_and: All input signals should be an intbv.'),
+            vector_and_wrapper,
+            **self.args
+        )
+
+    def test_invalid_output_signal_bitwidth(self):
+        ''' The `vector_and` should raise an error if the `output` is not the
+        same bitwidth as the signals in the `input_signals` list.
+        '''
+
+        # Pick a random invalid bitwidth
+        valid_bitwidth = len(self.args['output'])
+        invalid_bitwidths = [n for n in range(1, 32) if n != valid_bitwidth]
+        invalid_bitwidth = random.choice(invalid_bitwidths)
+
+        # Overwrite the output with an invalid bitwidth
+        self.args['output'] = Signal(intbv(0)[invalid_bitwidth:])
+
+        self.assertRaisesRegex(
+            TypeError,
+            ('vector_and: The output signal should be the same bitwidth as '
+             'the input signals.'),
+            vector_and_wrapper,
+            **self.args
+        )
+
+    def test_boolean_output(self):
+        ''' The `vector_and` should raise an error if the `output` is a
+        boolean.
+        '''
+
+        # Overwrite the input signals with 1 bit wide signals
+        n_input_signals = 8
+        self.args['input_signals'] = [
+            Signal(intbv(0)[1:]) for n in range(n_input_signals)]
+
+        # Overwrite the output with a bool
+        self.args['output'] = Signal(False)
+
+        self.assertRaisesRegex(
+            TypeError,
+            ('vector_and: The output signal should be an intbv.'),
+            vector_and_wrapper,
+            **self.args
+        )
 
 class TestVectorAnd(KeaTestCase):
 
@@ -67,134 +155,219 @@ class TestVectorAnd(KeaTestCase):
         self.args, self.arg_types = test_args_setup()
 
     @block
-    def random_signal_driver(self, clock, sig_to_drive):
+    def random_signal_driver(self, clock, set_high, sig_to_drive):
+
+        return_objects = []
+
+        bitwidth = len(sig_to_drive)
+        val_upper_bound = 2**bitwidth
+        max_val = val_upper_bound-1
 
         @always(clock.posedge)
         def driver():
 
             random_val = random.random()
 
-            if random_val < 0.3:
-                # 30% of the time set to 0
-                sig_to_drive.next = 0
-
-            elif random_val < 0.5:
-                # 20% of the time set a single bit
-                shift = random.randrange(len(sig_to_drive))
-                sig_to_drive.next = 1 << shift
-
-            elif random_val < 0.7:
-                # 20% of the time set all bits
-                sig_to_drive.next = 2**len(sig_to_drive) - 1
+            if random_val < 0.1:
+                sig_to_drive.next = max_val
 
             else:
-                # 30% of the time set a random number
-                sig_to_drive.next = random.randrange(2**len(sig_to_drive))
+                sig_to_drive.next = random.randrange(val_upper_bound)
 
-        return driver
+            if set_high:
+                sig_to_drive.next = max_val
 
-    @block
-    def check_and(self, clock, output, input_signal):
-
-        return_objects = []
-
-        # Create a random signal driver for the input
-        return_objects.append(
-            self.random_signal_driver(clock, input_signal))
-
-        bitwidth = len(input_signal)
-        all_true = 2**bitwidth - 1
-
-        @always(clock.posedge)
-        def stim_check():
-
-            if input_signal == all_true:
-                self.assertTrue(output)
-
-            else:
-                self.assertFalse(output)
-
-        return_objects.append(stim_check)
+        return_objects.append(driver)
 
         return return_objects
 
-    def test_random_input_bitwidths(self):
-        ''' The `vector_and` block should be able to AND an input signal of
-        any width.
+    @block
+    def check_and(self, **kwargs):
+
+        clock = kwargs['clock']
+        output = kwargs['output']
+        input_signals = kwargs['input_signals']
+
+        return_objects = []
+
+        n_input_signals = len(input_signals)
+
+        stim_set_high = Signal(False)
+
+        for input_sig in input_signals:
+            # Create a block to drive all of the input signals
+            return_objects.append(
+                self.random_signal_driver(clock, stim_set_high, input_sig))
+
+        @always(clock.posedge)
+        def check():
+
+            # Pulse stim_set_high
+            stim_set_high.next = False
+
+            if random.random() < 0.05:
+                # Randomly send a stim set high so that there are times when
+                # all bits of all input signals are high
+                stim_set_high.next = True
+
+            expected_output = int(input_signals[0].val)
+            for n in range(1, n_input_signals):
+                expected_output &= int(input_signals[n].val)
+
+            assert(output == expected_output)
+
+        return_objects.append(check)
+
+        return return_objects
+
+    def test_vector_and(self):
+        ''' The `vector_and` block should perform a bitwise AND of all the
+        signals in the `input_signals` list and output the result on the
+        `output` signal.
         '''
 
         cycles = 2000
 
         @block
-        def test(clock, output, input_signal):
+        def test(**kwargs):
 
             return_objects = []
 
-            return_objects.append(
-                self.check_and(clock, output, input_signal))
+            return_objects.append(self.check_and(**kwargs))
 
             return return_objects
 
         dut_outputs, ref_outputs = self.cosimulate(
-            cycles, vector_and_wrapper, vector_and_wrapper,
-            self.args, self.arg_types, custom_sources=[(test, (), self.args)])
+            cycles, vector_and_wrapper, vector_and_wrapper, self.args,
+            self.arg_types, custom_sources=[(test, (), self.args)])
 
         self.assertEqual(dut_outputs, ref_outputs)
 
-    def test_input_bitwidth_of_1(self):
-        ''' The `vector_and` block should be able to handle `input_signal`
-        which is a single bit wide.
+    def test_random_inputs(self):
+        ''' The `vector_and` block should function correctly for any number of
+        signals in the `input_signals` list.
+
+        The `vector_and` block should function correctly for any bitwidths of
+        input and output signals (as long as the inputs and output have the
+        same bitwidth).
         '''
 
         cycles = 2000
 
-        self.args['input_signal'] = Signal(intbv(0)[1:])
+        n_input_signals = random.randrange(2, 10)
+        bitwidth = random.randrange(2, 17)
+
+        self.args['input_signals'] = [
+            Signal(intbv(0)[bitwidth:]) for n in range(n_input_signals)]
+        self.args['output'] = Signal(intbv(0)[bitwidth:])
 
         @block
-        def test(clock, output, input_signal):
+        def test(**kwargs):
 
             return_objects = []
 
-            return_objects.append(
-                self.check_and(clock, output, input_signal))
+            return_objects.append(self.check_and(**kwargs))
 
             return return_objects
 
         dut_outputs, ref_outputs = self.cosimulate(
-            cycles, vector_and_wrapper, vector_and_wrapper,
-            self.args, self.arg_types, custom_sources=[(test, (), self.args)])
+            cycles, vector_and_wrapper, vector_and_wrapper, self.args,
+            self.arg_types, custom_sources=[(test, (), self.args)])
 
         self.assertEqual(dut_outputs, ref_outputs)
 
-    def test_input_boolean(self):
-        ''' The `vector_and` block should be able to handle an `input_signal`
-        which is a boolean signals.
+    def test_random_n_one_bit_inputs(self):
+        ''' The `vector_and` block should function correctly for any number of
+        signals of one bit signals in the `input_signals` list. In this case
+        it should act like a reducing and.
         '''
 
         cycles = 2000
 
-        self.args['input_signal'] = Signal(False)
+        n_input_signals = random.randrange(2, 10)
+        bitwidth = 1
+
+        self.args['input_signals'] = [
+            Signal(intbv(0)[bitwidth:]) for n in range(n_input_signals)]
+        self.args['output'] = Signal(intbv(0)[bitwidth:])
 
         @block
-        def test(clock, output, input_signal):
+        def test(**kwargs):
 
             return_objects = []
 
-            return_objects.append(
-                self.check_and(clock, output, input_signal))
+            return_objects.append(self.check_and(**kwargs))
 
             return return_objects
 
         dut_outputs, ref_outputs = self.cosimulate(
-            cycles, vector_and_wrapper, vector_and_wrapper,
-            self.args, self.arg_types, custom_sources=[(test, (), self.args)])
+            cycles, vector_and_wrapper, vector_and_wrapper, self.args,
+            self.arg_types, custom_sources=[(test, (), self.args)])
 
         self.assertEqual(dut_outputs, ref_outputs)
 
-class TestVectorAndVivadoVhdl(
-    KeaVivadoVHDLTestCase, TestVectorAnd):
+    def test_one_input_random_bitwidth(self):
+        ''' The `vector_and` block should function correctly when there is a
+        single signal in the `input_signals` list. In this case it should just
+        pass the signal through.
+        '''
+
+        cycles = 2000
+
+        n_input_signals = 1
+        bitwidth = random.randrange(1, 17)
+
+        self.args['input_signals'] = [
+            Signal(intbv(0)[bitwidth:]) for n in range(n_input_signals)]
+        self.args['output'] = Signal(intbv(0)[bitwidth:])
+
+        @block
+        def test(**kwargs):
+
+            return_objects = []
+
+            return_objects.append(self.check_and(**kwargs))
+
+            return return_objects
+
+        dut_outputs, ref_outputs = self.cosimulate(
+            cycles, vector_and_wrapper, vector_and_wrapper, self.args,
+            self.arg_types, custom_sources=[(test, (), self.args)])
+
+        self.assertEqual(dut_outputs, ref_outputs)
+
+    def test_one_input_bitwidth_one(self):
+        ''' The `vector_and` block should function correctly when there is a
+        single signal of bitwidth 1 in the `input_signals` list. In this case
+        it should just pass the signal through.
+        '''
+
+        cycles = 2000
+
+        n_input_signals = 1
+        bitwidth = 1
+
+        self.args['input_signals'] = [
+            Signal(intbv(0)[bitwidth:]) for n in range(n_input_signals)]
+        self.args['output'] = Signal(intbv(0)[bitwidth:])
+
+        @block
+        def test(**kwargs):
+
+            return_objects = []
+
+            return_objects.append(self.check_and(**kwargs))
+
+            return return_objects
+
+        dut_outputs, ref_outputs = self.cosimulate(
+            cycles, vector_and_wrapper, vector_and_wrapper, self.args,
+            self.arg_types, custom_sources=[(test, (), self.args)])
+
+        self.assertEqual(dut_outputs, ref_outputs)
+
+class TestVectorAndVivadoVhdl(KeaVivadoVHDLTestCase, TestVectorAnd):
     pass
 
-class TestVectorAndVivadoVerilog(
-    KeaVivadoVerilogTestCase, TestVectorAnd):
+class TestVectorAndVivadoVerilog(KeaVivadoVerilogTestCase, TestVectorAnd):
     pass

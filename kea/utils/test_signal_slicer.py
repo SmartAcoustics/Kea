@@ -263,6 +263,36 @@ class TestSignalSlicerSimulation(KeaTestCase):
 
         self.assertEqual(dut_outputs, ref_outputs)
 
+    def test_bool_output(self):
+        ''' The signal_slicer should work correctly with a bitwidth of 1 and a
+        boolean `signal_out`.
+        '''
+
+        args = self.default_args.copy()
+        arg_types = self.default_arg_types.copy()
+
+        # Modify the arguments to test the required behaviour
+        args['slice_offset'] = random.randrange(self.signal_in_width)
+        args['slice_bitwidth'] = 1
+        args['signal_out'] = Signal(False)
+
+        cycles = 2000
+
+        @block
+        def stimulate_check(
+            clock, signal_in, slice_offset, slice_bitwidth, signal_out):
+
+            return (
+                self.check_signal_slicer(
+                    clock, signal_in, slice_offset, slice_bitwidth,
+                    signal_out))
+
+        dut_outputs, ref_outputs = self.cosimulate(
+            cycles, signal_slicer_wrapper, signal_slicer_wrapper, args,
+            arg_types, custom_sources=[(stimulate_check, (), args)])
+
+        self.assertEqual(dut_outputs, ref_outputs)
+
 class TestSignalSlicerVivadoVhdlSimulation(
     KeaVivadoVHDLTestCase, TestSignalSlicerSimulation):
     pass

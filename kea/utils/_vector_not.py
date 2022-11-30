@@ -1,6 +1,6 @@
 from myhdl import block, always_comb
 
-from kea.utils.logic import not_gate
+from .logic import not_gate
 
 @block
 def vector_not(output, input_signal):

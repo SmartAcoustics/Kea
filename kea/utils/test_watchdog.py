@@ -7,8 +7,8 @@ from myhdl import Signal, block, always, intbv, StopSimulation
 from kea.test_utils.base_test import (
     KeaTestCase, KeaVivadoVHDLTestCase, KeaVivadoVerilogTestCase)
 
-from kea.utils import rising_edge_detector, constant_assigner
-
+from ._rising_edge_detector import rising_edge_detector
+from ._constant_assigner import constant_assigner
 from ._watchdog import watchdog
 
 def test_args_setup():

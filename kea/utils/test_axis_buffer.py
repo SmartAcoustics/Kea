@@ -7,11 +7,10 @@ from myhdl import (
 
 from kea.axi import (
     AxiStreamInterface, AxiStreamMasterBFM, AxiStreamSlaveBFM)
-
-from kea.utils import or_gate
 from kea.test_utils.base_test import (
     KeaTestCase, KeaVivadoVHDLTestCase, KeaVivadoVerilogTestCase)
 
+from .logic import or_gate
 from ._axis_buffer import axis_buffer
 
 class TestAxisBufferInterface(KeaTestCase):

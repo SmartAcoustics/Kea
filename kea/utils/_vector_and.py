@@ -1,55 +1,72 @@
-from myhdl import block, always_comb, Signal, intbv
+from myhdl import block, Signal, intbv
 
-from kea.utils import signal_assigner
-from kea.utils._vector_not import vector_not
+from ._variable_width_and import variable_width_and
+from ._signal_assigner import signal_assigner
+from ._combined_signal_assigner import combined_signal_assigner
+from ._signal_slicer import signal_slicer
 
 @block
-def vector_and(output, input_signal):
-    ''' This block will AND all of the bits in the input signal onto the
-    output.
+def vector_and(output, input_signals):
+    '''This block will bitwise AND all of the signals in the input signals
+    onto the output.
 
-    The `output` arg should be the same width as the input.
+    The `output` arg should be a signal which is the same width as the signals
+    in the `input_signals` list.
 
-    The `input_signal` arg should be a signal which is at least one bit wide.
+    The `input_signals` should be a list of signals all of which are the same
+    width.
     '''
 
-    if output._type != bool:
-        raise ValueError('vector_and: output must be a boolean signal')
+    if len(input_signals) <= 0:
+        raise ValueError(
+            'vector_and: There should be at least one input signal.')
+
+    bitwidth = len(input_signals[0])
+    n_input_signals = len(input_signals)
+
+    for n in range(n_input_signals):
+        if input_signals[n]._type != intbv:
+            raise TypeError(
+                'vector_and: All input signals should be an intbv.')
+
+    for n in range(1, n_input_signals):
+        if len(input_signals[n]) != bitwidth:
+            raise TypeError(
+                'vector_and: All input signals should be the same bitwidth.')
+
+    if output._type != intbv:
+        raise TypeError('vector_and: The output signal should be an intbv.')
+
+    if len(output) != bitwidth:
+        raise TypeError(
+            'vector_and: The output signal should be the same bitwidth as the '
+            'input signals.')
 
     return_objects = []
 
-    input_bitwidth = len(input_signal)
-
-    if input_bitwidth == 1:
-        return_objects.append(signal_assigner(input_signal, output))
+    if len(input_signals) == 1:
+        # Only one input signal so connect it to the output
+        return_objects.append(signal_assigner(input_signals[0], output))
 
     else:
-        # As we are ANDing signals we can simply not the input signal and
-        # compare it to 0. The first iterations of this code did not use this
-        # technique. Instead they compared the input signals to a constant
-        # with all bits high. This was problematic as MyHdl does not convert
-        # to VHDL correctly when the bitwidth of that constant is greater than
-        # 31. The work around was:
-        #
-        #all_true_val = 2**len(input_signals) - 1
-        #all_true = Signal(intbv(all_true_val, 0, all_true_val+1))
-        #return_objects.append(constant_assigner(all_true_val, all_true))
+        # Create a list of signals to carry the result of each bitwise AND
+        and_out_bits = [Signal(False) for n in range(bitwidth)]
 
-        # Not the input signal
-        inverted_input = Signal(intbv(0)[input_bitwidth:])
-        return_objects.append(vector_not(inverted_input, input_signal))
+        for n in range(bitwidth):
+            # Create a list of signals to connect the input_signals to the AND
+            # gates
+            and_bits = [Signal(False) for n in range(n_input_signals)]
 
-        @always_comb
-        def logic():
+            for input_sig, and_bit in zip(input_signals, and_bits):
+                # Extract bit n from each input signal and connect it to the
+                # AND input
+                return_objects.append(signal_slicer(input_sig, n, 1, and_bit))
 
-            if inverted_input == 0:
-                # If the inverted input signals are all 0 then the non
-                # inverted input signals are all 1.
-                output.next = True
+            # Bitwise AND bit n from the input signals
+            return_objects.append(
+                variable_width_and(and_out_bits[n], and_bits))
 
-            else:
-                output.next = False
-
-        return_objects.append(logic)
+        # Combine the bits of the AND result and use them to drive the output
+        return_objects.append(combined_signal_assigner(and_out_bits, output))
 
     return return_objects

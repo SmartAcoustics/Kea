@@ -1,24 +1,71 @@
-from myhdl import block, always_comb, Signal
+from myhdl import block, Signal, intbv
+
+from ._variable_width_or import variable_width_or
+from ._signal_assigner import signal_assigner
+from ._combined_signal_assigner import combined_signal_assigner
+from ._signal_slicer import signal_slicer
 
 @block
-def vector_or(output, input_signal):
-    ''' This block will OR all of the bits in the input signal onto the
-    output.
+def vector_or(output, input_signals):
+    '''This block will bitwise OR all of the signals in the input signals onto
+    the output.
 
-    The `output` arg should be a boolean signal.
+    The `output` arg should be a signal which is the same width as the signals
+    in the `input_signals` list.
 
-    The `input_signal` arg should be a signal which is at least one bit wide.
+    The `input_signals` should be a list of signals all of which are the same
+    width.
     '''
 
-    if output._type != bool:
-        raise ValueError('output must be a boolean signal')
+    if len(input_signals) <= 0:
+        raise ValueError(
+            'vector_or: There should be at least one input signal.')
 
-    @always_comb
-    def logic():
-        if input_signal != 0:
-            output.next = True
+    bitwidth = len(input_signals[0])
+    n_input_signals = len(input_signals)
 
-        else:
-            output.next = False
+    for n in range(n_input_signals):
+        if input_signals[n]._type != intbv:
+            raise TypeError(
+                'vector_or: All input signals should be an intbv.')
 
-    return logic
+    for n in range(1, n_input_signals):
+        if len(input_signals[n]) != bitwidth:
+            raise TypeError(
+                'vector_or: All input signals should be the same bitwidth.')
+
+    if output._type != intbv:
+        raise TypeError('vector_or: The output signal should be an intbv.')
+
+    if len(output) != bitwidth:
+        raise TypeError(
+            'vector_or: The output signal should be the same bitwidth as the '
+            'input signals.')
+
+    return_objects = []
+
+    if len(input_signals) == 1:
+        # Only one input signal so connect it to the output
+        return_objects.append(signal_assigner(input_signals[0], output))
+
+    else:
+        # Create a list of signals to carry the result of each bitwise OR
+        or_out_bits = [Signal(False) for n in range(bitwidth)]
+
+        for n in range(bitwidth):
+            # Create a list of signals to connect the input_signals to the OR
+            # gates
+            or_bits = [Signal(False) for n in range(n_input_signals)]
+
+            for input_sig, or_bit in zip(input_signals, or_bits):
+                # Extract bit n from each input signal and connect it to the
+                # OR input
+                return_objects.append(signal_slicer(input_sig, n, 1, or_bit))
+
+            # Bitwise OR bit n from the input signals
+            return_objects.append(variable_width_or(or_out_bits[n], or_bits))
+
+        # Combine the bits of the OR result and use them to drive the output
+        return_objects.append(combined_signal_assigner(or_out_bits, output))
+
+    return return_objects

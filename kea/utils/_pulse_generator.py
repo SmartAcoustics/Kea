@@ -1,6 +1,7 @@
 from myhdl import *
 
-from kea.utils import synchronous_signal_assigner, signal_assigner
+from ._synchronous_signal_assigner import synchronous_signal_assigner
+from ._signal_assigner import signal_assigner
 
 @block
 def pulse_generator(clock, reset, trigger, output, pulse_n_cycles):

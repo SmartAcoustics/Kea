@@ -2,7 +2,8 @@ from math import ceil
 
 from myhdl import block, Signal, intbv, always
 
-from kea.utils import rising_edge_detector, constant_assigner
+from ._rising_edge_detector import rising_edge_detector
+from ._constant_assigner import constant_assigner
 
 @block
 def watchdog(
