@@ -22,6 +22,11 @@ def xil_oddr(
     #     INIT - Initial value for data_out
     #     SRTYPE - Set and Reset can be ASYNC or SYNC
 
+    # NOTE on usage: From observation, the data_out signal is held low until
+    # clock_enable goes high. When clock_enable goes high, the data_out is
+    # driven on the next rising edge of clock. When clock_enable goes low,
+    # data_out holds its current value.
+
     global oddr_block_count
 
     # Need to specify if the signals are inputs or outputs for the conversion
@@ -57,14 +62,14 @@ def xil_oddr(
             if clock == True:
                 enabled.next = clock_enable
 
-            if enabled and clock_enable:
-                # clock_enable going low immediately stops the transmission
-                if clock == True:
-                    # On rising edges of clock data_in_0 is forwarded
+            if clock:
+                # On rising edges of clock data_in_0 is forwarded
+                if clock_enable:
                     data_out.next = data_in_0
 
-                else:
-                    # On falling edges of clock data_in_1 is forwarded
+            else:
+                # On falling edges of clock data_in_1 is forwarded
+                if enabled and clock_enable:
                     data_out.next = data_in_1
 
             if reset:
@@ -145,14 +150,14 @@ def xil_oddr(
             if clock == True:
                 enabled.next = clock_enable
 
-            if enabled and clock_enable:
-                # clock_enable going low immediately stops the transmission
-                if clock == True:
-                    # On rising edges of clock data_in_0 is forwarded
+            if clock:
+                # On rising edges of clock data_in_0 is forwarded
+                if clock_enable:
                     data_out.next = data_in_0
 
-                else:
-                    # On falling edges of clock data_in_1 is forwarded
+            else:
+                # On falling edges of clock data_in_1 is forwarded
+                if enabled and clock_enable:
                     data_out.next = data_in_1
 
             if set_high:
