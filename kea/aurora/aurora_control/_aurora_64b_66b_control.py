@@ -3,9 +3,9 @@ from myhdl import block, Signal, intbv, enum, always
 from kea.utils import double_buffer
 
 @block
-def aurora_control(
+def aurora_64b_66b_control(
     clock, enable, ready, reset_pb, pma_init, channel_up, clock_frequency):
-    ''' This block controls the aurora power up and reset flow.
+    ''' This block controls the aurora power up and reset sequence.
 
     channel_up, reset_pb and pma_init should be connected to the corresponding
     io on the aurora block.
@@ -15,16 +15,20 @@ def aurora_control(
 
     if clock_frequency <= 0:
         raise ValueError(
-            'aurora_control: clock_frequency should be greater than 0.')
+            'aurora_64b_66b_control: clock_frequency should be greater than '
+            '0.')
 
     if ready.val is not False:
-        raise ValueError('aurora_control: ready should initialise False.')
+        raise ValueError(
+            'aurora_64b_66b_control: ready should initialise False.')
 
     if reset_pb.val is not True:
-        raise ValueError('aurora_control: reset_pb should initialise True.')
+        raise ValueError(
+            'aurora_64b_66b_control: reset_pb should initialise True.')
 
     if pma_init.val is not True:
-        raise ValueError('aurora_control: pma_init should initialise True.')
+        raise ValueError(
+            'aurora_64b_66b_control: pma_init should initialise True.')
 
     return_objects = []
 

@@ -3,6 +3,9 @@ def axi_stream_types_generator(
     use_TLAST=True, use_TSTRB=False, use_TKEEP=False):
     ''' Generates the types for the AXIS interface. If sink is False then it
     is assumed to be a source interface.
+
+    Note source/sink is from the perspective of the DUT. A source AXIS means
+    data flows into the DUT. A sink AXIS means data flows out of the DUT
     '''
 
     if sink:

@@ -6,7 +6,7 @@ from kea.test_utils import (
     KeaTestCase, KeaVivadoVHDLTestCase, KeaVivadoVerilogTestCase)
 from kea.utils import double_buffer
 
-from ._aurora_control import aurora_control
+from ._aurora_64b_66b_control import aurora_64b_66b_control
 
 def test_args_setup():
     ''' Generate the arguments and argument types for the DUT.
@@ -36,7 +36,7 @@ def test_args_setup():
 
     return args, arg_types
 
-class TestAuroraControlInterface(KeaTestCase):
+class TestAurora64b66bControlInterface(KeaTestCase):
     ''' The DUT should reject incompatible interfaces and arguments.
     '''
 
@@ -44,35 +44,37 @@ class TestAuroraControlInterface(KeaTestCase):
         self.args, _arg_types = test_args_setup()
 
     def test_negative_clock_frequency(self):
-        ''' The `aurora_control` should raise an error if `clock_frequency` is
-        negative.
+        ''' The `aurora_64b_66b_control` should raise an error if
+        `clock_frequency` is negative.
         '''
 
         self.args['clock_frequency'] = random.randrange(-100, 0)
 
         self.assertRaisesRegex(
             ValueError,
-            ('aurora_control: clock_frequency should be greater than 0.'),
-            aurora_control,
+            ('aurora_64b_66b_control: clock_frequency should be greater than '
+             '0.'),
+            aurora_64b_66b_control,
             **self.args,
         )
 
     def test_zero_clock_frequency(self):
-        ''' The `aurora_control` should raise an error if `clock_frequency` is
-        zero.
+        ''' The `aurora_64b_66b_control` should raise an error if
+        `clock_frequency` is zero.
         '''
 
         self.args['clock_frequency'] = 0
 
         self.assertRaisesRegex(
             ValueError,
-            ('aurora_control: clock_frequency should be greater than 0.'),
-            aurora_control,
+            ('aurora_64b_66b_control: clock_frequency should be greater than '
+             '0.'),
+            aurora_64b_66b_control,
             **self.args,
         )
 
     def test_ready_invalid_init_val(self):
-        ''' The `aurora_control` should raise an error if `ready` is
+        ''' The `aurora_64b_66b_control` should raise an error if `ready` is
         initialised with anything that isn't `False`.
         '''
 
@@ -80,40 +82,40 @@ class TestAuroraControlInterface(KeaTestCase):
 
         self.assertRaisesRegex(
             ValueError,
-            ('aurora_control: ready should initialise False.'),
-            aurora_control,
+            ('aurora_64b_66b_control: ready should initialise False.'),
+            aurora_64b_66b_control,
             **self.args,
         )
 
     def test_reset_pb_invalid_init_val(self):
-        ''' The `aurora_control` should raise an error if `reset_pb` is
-        initialised with anything that isn't `True`.
+        ''' The `aurora_64b_66b_control` should raise an error if `reset_pb`
+        is initialised with anything that isn't `True`.
         '''
 
         self.args['reset_pb'] = Signal(False)
 
         self.assertRaisesRegex(
             ValueError,
-            ('aurora_control: reset_pb should initialise True.'),
-            aurora_control,
+            ('aurora_64b_66b_control: reset_pb should initialise True.'),
+            aurora_64b_66b_control,
             **self.args,
         )
 
     def test_pma_init_invalid_init_val(self):
-        ''' The `aurora_control` should raise an error if `pma_init` is
-        initialised with anything that isn't `True`.
+        ''' The `aurora_64b_66b_control` should raise an error if `pma_init`
+        is initialised with anything that isn't `True`.
         '''
 
         self.args['pma_init'] = Signal(False)
 
         self.assertRaisesRegex(
             ValueError,
-            ('aurora_control: pma_init should initialise True.'),
-            aurora_control,
+            ('aurora_64b_66b_control: pma_init should initialise True.'),
+            aurora_64b_66b_control,
             **self.args,
         )
 
-class TestAuroraControl(KeaTestCase):
+class TestAurora64b66bControl(KeaTestCase):
 
     def setUp(self):
         self.args, self.arg_types = test_args_setup()
@@ -177,7 +179,7 @@ class TestAuroraControl(KeaTestCase):
         return return_objects
 
     @block
-    def aurora_control_stim(self, stim_enable=False, **kwargs):
+    def aurora_64b_66b_control_stim(self, stim_enable=False, **kwargs):
 
         clock = kwargs['clock']
         enable = kwargs['enable']
@@ -207,7 +209,7 @@ class TestAuroraControl(KeaTestCase):
         return return_objects
 
     @block
-    def aurora_control_check(self, **kwargs):
+    def aurora_64b_66b_control_check(self, **kwargs):
 
         clock = kwargs['clock']
         enable = kwargs['enable']
@@ -299,8 +301,8 @@ class TestAuroraControl(KeaTestCase):
         ''' This spec is based on the Reset and Power Down section of the
         PG074 Aurora 64B/66B LogiCORE IP Product Guide.
 
-        At power on the `aurora_control` block should perform the following
-        sequence:
+        At power on the `aurora_64b_66b_control` block should perform the
+        following sequence:
 
             - Hold `ready` low, hold `reset_pb` high and hold `pma_init` high.
             - Wait for `enable` to go high.
@@ -321,21 +323,22 @@ class TestAuroraControl(KeaTestCase):
 
             return_objects.append(self.end_tests(n_tests, **kwargs))
             return_objects.append(self.aurora_bfm(**kwargs))
-            return_objects.append(self.aurora_control_stim(**kwargs))
-            return_objects.append(self.aurora_control_check(**kwargs))
+            return_objects.append(self.aurora_64b_66b_control_stim(**kwargs))
+            return_objects.append(self.aurora_64b_66b_control_check(**kwargs))
 
             return return_objects
 
         dut_outputs, ref_outputs = self.cosimulate(
-            cycles, aurora_control, aurora_control, self.args, self.arg_types,
-            custom_sources=[(stimulate_check, (), self.args)])
+            cycles, aurora_64b_66b_control, aurora_64b_66b_control, self.args,
+            self.arg_types, custom_sources=[(stimulate_check, (), self.args)])
 
         assert(self.tests_run)
         self.assertEqual(dut_outputs, ref_outputs)
 
     def test_channel_up(self):
         ''' A falling edge on the `channel_up` signal should trigger the
-        `aurora_control` block to perform the following reset sequence:
+        `aurora_64b_66b_control` block to perform the following reset
+        sequence:
 
             - Set `ready` low.
             - Set `reset_pb` high.
@@ -360,20 +363,21 @@ class TestAuroraControl(KeaTestCase):
             return_objects.append(self.end_tests(n_tests, **kwargs))
             return_objects.append(
                 self.aurora_bfm(stim_channel_up=True, **kwargs))
-            return_objects.append(self.aurora_control_stim(**kwargs))
-            return_objects.append(self.aurora_control_check(**kwargs))
+            return_objects.append(self.aurora_64b_66b_control_stim(**kwargs))
+            return_objects.append(self.aurora_64b_66b_control_check(**kwargs))
 
             return return_objects
 
         dut_outputs, ref_outputs = self.cosimulate(
-            cycles, aurora_control, aurora_control, self.args, self.arg_types,
-            custom_sources=[(stimulate_check, (), self.args)])
+            cycles, aurora_64b_66b_control, aurora_64b_66b_control, self.args,
+            self.arg_types, custom_sources=[(stimulate_check, (), self.args)])
 
         assert(self.tests_run)
         self.assertEqual(dut_outputs, ref_outputs)
 
     def test_enable(self):
-        ''' When the `enable` signal goes low the `aurora_control` should:
+        ''' When the `enable` signal goes low the `aurora_64b_66b_control`
+        should:
 
             - Set `ready` low.
             - Set `reset_pb` high.
@@ -402,14 +406,14 @@ class TestAuroraControl(KeaTestCase):
             return_objects.append(self.end_tests(n_tests, **kwargs))
             return_objects.append(self.aurora_bfm(**kwargs))
             return_objects.append(
-                self.aurora_control_stim(stim_enable=True, **kwargs))
-            return_objects.append(self.aurora_control_check(**kwargs))
+                self.aurora_64b_66b_control_stim(stim_enable=True, **kwargs))
+            return_objects.append(self.aurora_64b_66b_control_check(**kwargs))
 
             return return_objects
 
         dut_outputs, ref_outputs = self.cosimulate(
-            cycles, aurora_control, aurora_control, self.args, self.arg_types,
-            custom_sources=[(stimulate_check, (), self.args)])
+            cycles, aurora_64b_66b_control, aurora_64b_66b_control, self.args,
+            self.arg_types, custom_sources=[(stimulate_check, (), self.args)])
 
         assert(self.tests_run)
         self.assertEqual(dut_outputs, ref_outputs)
@@ -431,23 +435,23 @@ class TestAuroraControl(KeaTestCase):
             return_objects.append(
                 self.aurora_bfm(stim_channel_up=True, **kwargs))
             return_objects.append(
-                self.aurora_control_stim(stim_enable=True, **kwargs))
-            return_objects.append(self.aurora_control_check(**kwargs))
+                self.aurora_64b_66b_control_stim(stim_enable=True, **kwargs))
+            return_objects.append(self.aurora_64b_66b_control_check(**kwargs))
 
             return return_objects
 
         dut_outputs, ref_outputs = self.cosimulate(
-            cycles, aurora_control, aurora_control, self.args, self.arg_types,
-            custom_sources=[(stimulate_check, (), self.args)])
+            cycles, aurora_64b_66b_control, aurora_64b_66b_control, self.args,
+            self.arg_types, custom_sources=[(stimulate_check, (), self.args)])
 
         assert(self.tests_run)
         self.assertEqual(dut_outputs, ref_outputs)
 
     def test_clock_frequency(self):
-        ''' The `aurora_control` block should use the `clock_frequency` to
-        determine the `pma_init` high period. The `pma_init` should be set
-        high for 1 second as part of the reset sequences. This equates to
-        `clock_frequency` cycles.
+        ''' The `aurora_64b_66b_control` block should use the
+        `clock_frequency` to determine the `pma_init` high period. The
+        `pma_init` should be set high for 1 second as part of the reset
+        sequences. This equates to `clock_frequency` cycles.
         '''
 
         cycles = 40000
@@ -463,22 +467,22 @@ class TestAuroraControl(KeaTestCase):
             return_objects.append(self.end_tests(n_tests, **kwargs))
             return_objects.append(
                 self.aurora_bfm(stim_channel_up=True, **kwargs))
-            return_objects.append(self.aurora_control_stim(**kwargs))
-            return_objects.append(self.aurora_control_check(**kwargs))
+            return_objects.append(self.aurora_64b_66b_control_stim(**kwargs))
+            return_objects.append(self.aurora_64b_66b_control_check(**kwargs))
 
             return return_objects
 
         dut_outputs, ref_outputs = self.cosimulate(
-            cycles, aurora_control, aurora_control, self.args, self.arg_types,
-            custom_sources=[(stimulate_check, (), self.args)])
+            cycles, aurora_64b_66b_control, aurora_64b_66b_control, self.args,
+            self.arg_types, custom_sources=[(stimulate_check, (), self.args)])
 
         assert(self.tests_run)
         self.assertEqual(dut_outputs, ref_outputs)
 
-class TestAuroraControlVivadoVhdl(
-    KeaVivadoVHDLTestCase, TestAuroraControl):
+class TestAurora64b66bControlVivadoVhdl(
+    KeaVivadoVHDLTestCase, TestAurora64b66bControl):
     pass
 
-class TestAuroraControlVivadoVerilog(
-    KeaVivadoVerilogTestCase, TestAuroraControl):
+class TestAurora64b66bControlVivadoVerilog(
+    KeaVivadoVerilogTestCase, TestAurora64b66bControl):
     pass
