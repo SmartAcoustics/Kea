@@ -224,6 +224,10 @@ class TestAurora64b66bControl(KeaTestCase):
         buffered_enable = Signal(False)
         return_objects.append(double_buffer(clock, enable, buffered_enable))
 
+        buffered_channel_up = Signal(False)
+        return_objects.append(
+            double_buffer(clock, channel_up, buffered_channel_up))
+
         reset_pb_n_cycles = 128
         pma_init_n_cycles = clock_frequency
 
@@ -273,7 +277,7 @@ class TestAurora64b66bControl(KeaTestCase):
                     elif count == reset_pb_low_cycle-1:
                         expected_reset_pb.next = False
 
-                elif channel_up:
+                elif buffered_channel_up:
                     expected_ready.next = True
                     count.next = 0
 
@@ -281,7 +285,7 @@ class TestAurora64b66bControl(KeaTestCase):
                     state.next = t_state.RUNNING
 
             elif state == t_state.RUNNING:
-                if not channel_up:
+                if not buffered_channel_up:
                     expected_ready.next = False
                     expected_reset_pb.next = True
                     count.next = 0
