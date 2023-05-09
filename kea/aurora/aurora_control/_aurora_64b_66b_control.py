@@ -11,6 +11,9 @@ def aurora_64b_66b_control(
     io on the aurora block.
 
     clock_frequency should be the clock frequency of the the clock.
+
+    clock_frequency should be less than or equal to the frequency of the
+    user_clock out from the Aurora block.
     '''
 
     if clock_frequency <= 0:
