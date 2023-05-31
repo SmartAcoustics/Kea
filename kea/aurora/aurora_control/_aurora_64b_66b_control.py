@@ -11,6 +11,9 @@ def aurora_64b_66b_control(
     io on the aurora block.
 
     clock_frequency should be the clock frequency of the the clock.
+
+    clock_frequency should be less than or equal to the frequency of the
+    user_clock out from the Aurora block.
     '''
 
     if clock_frequency <= 0:
@@ -42,6 +45,10 @@ def aurora_64b_66b_control(
 
     buffered_enable = Signal(False)
     return_objects.append(double_buffer(clock, enable, buffered_enable))
+
+    buffered_channel_up = Signal(False)
+    return_objects.append(
+        double_buffer(clock, channel_up, buffered_channel_up))
 
     t_state = enum('RESET', 'INIT', 'HOLD', 'AWAIT_CH_UP', 'RUNNING')
     state = Signal(t_state.RESET)
@@ -83,13 +90,13 @@ def aurora_64b_66b_control(
                 reset_pb_count.next = reset_pb_count + 1
 
         elif state == t_state.AWAIT_CH_UP:
-            if channel_up:
+            if buffered_channel_up:
                 # The aurora block has set channel up
                 ready.next = True
                 state.next = t_state.RUNNING
 
         elif state == t_state.RUNNING:
-            if not channel_up:
+            if not buffered_channel_up:
                 # Channel has gone down
                 ready.next = False
                 reset_pb.next = True

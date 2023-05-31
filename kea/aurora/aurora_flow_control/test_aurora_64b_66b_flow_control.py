@@ -427,10 +427,6 @@ class TestAurora64b66bFlowControl(KeaTestCase):
             self.args, self.arg_types,
             custom_sources=[(stimulate_check, (), self.args)])
 
-        for each in dut_outputs:
-            if dut_outputs[each] != ref_outputs[each]:
-                print(each)
-
         assert(self.tests_run)
         self.assertEqual(dut_outputs, ref_outputs)
 
