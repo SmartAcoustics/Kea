@@ -35,11 +35,15 @@ def aurora_64b_66b_control(
 
     return_objects = []
 
-    # Set up a pma_init_internal signal to ensure it is initialised with the
-    # correct value. This is necessary because we don't drive pma_init when
-    # enable enable is low.
+    # Set up internal signals so the signals are initialised with the correct
+    # value.
+    reset_pb_internal = Signal(True)
     pma_init_internal = Signal(True)
+    ready_internal = Signal(False)
+
+    return_objects.append(signal_assigner(reset_pb_internal, reset_pb))
     return_objects.append(signal_assigner(pma_init_internal, pma_init))
+    return_objects.append(signal_assigner(ready_internal, ready))
 
     reset_pb_n_cycles = 128
     reset_pb_count_threshold = reset_pb_n_cycles-1
@@ -88,7 +92,7 @@ def aurora_64b_66b_control(
         elif state == t_state.HOLD:
             if reset_pb_count >= reset_pb_count_threshold:
                 # reset_pb has been high for the required period
-                reset_pb.next = False
+                reset_pb_internal.next = False
                 state.next = t_state.AWAIT_CH_UP
 
             else:
@@ -98,21 +102,21 @@ def aurora_64b_66b_control(
         elif state == t_state.AWAIT_CH_UP:
             if buffered_channel_up:
                 # The aurora block has set channel up
-                ready.next = True
+                ready_internal.next = True
                 state.next = t_state.RUNNING
 
         elif state == t_state.RUNNING:
             if not buffered_channel_up:
                 # Channel has gone down
-                ready.next = False
-                reset_pb.next = True
+                ready_internal.next = False
+                reset_pb_internal.next = True
                 reset_pb_count.next = 0
                 state.next = t_state.RESET
 
         if not buffered_enable:
             # Enable has gone low
-            ready.next = False
-            reset_pb.next = True
+            ready_internal.next = False
+            reset_pb_internal.next = True
             reset_pb_count.next = 0
             state.next = t_state.RESET
 
