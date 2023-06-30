@@ -1,6 +1,6 @@
 from myhdl import block, Signal, intbv, enum, always
 
-from kea.utils import double_buffer
+from kea.utils import double_buffer, signal_assigner
 
 @block
 def aurora_64b_66b_control(
@@ -35,6 +35,12 @@ def aurora_64b_66b_control(
 
     return_objects = []
 
+    # Set up a pma_init_internal signal to ensure it is initialised with the
+    # correct value. This is necessary because we don't drive pma_init when
+    # enable enable is low.
+    pma_init_internal = Signal(True)
+    return_objects.append(signal_assigner(pma_init_internal, pma_init))
+
     reset_pb_n_cycles = 128
     reset_pb_count_threshold = reset_pb_n_cycles-1
     reset_pb_count = Signal(intbv(0, 0, reset_pb_n_cycles))
@@ -60,7 +66,7 @@ def aurora_64b_66b_control(
             if reset_pb_count >= reset_pb_count_threshold:
                 # reset_pb has been high long enough for the pma_init to be
                 # set high
-                pma_init.next = True
+                pma_init_internal.next = True
                 pma_init_count.next = 0
                 state.next = t_state.INIT
 
@@ -71,7 +77,7 @@ def aurora_64b_66b_control(
         elif state == t_state.INIT:
             if pma_init_count >= pma_init_count_threshold:
                 # pma_init has been high for the required period
-                pma_init.next = False
+                pma_init_internal.next = False
                 reset_pb_count.next = 0
                 state.next = t_state.HOLD
 
