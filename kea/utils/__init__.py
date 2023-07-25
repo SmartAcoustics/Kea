@@ -33,3 +33,5 @@ from ._ramp_towards import ramp_towards
 from ._equality_detector import equality_detector
 from .multiplexer import MultiplexerInputInterface, synchronous_multiplexer
 from .toggle import toggle_flip_flop
+from .multiple_double_buffers import (
+    DoubleBufferArrayInterface, double_buffer_array)

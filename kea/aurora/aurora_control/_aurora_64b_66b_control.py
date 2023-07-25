@@ -1,6 +1,6 @@
 from myhdl import block, Signal, intbv, enum, always
 
-from kea.utils import double_buffer
+from kea.utils import double_buffer, signal_assigner
 
 @block
 def aurora_64b_66b_control(
@@ -35,6 +35,16 @@ def aurora_64b_66b_control(
 
     return_objects = []
 
+    # Set up internal signals so the signals are initialised with the correct
+    # value.
+    reset_pb_internal = Signal(True)
+    pma_init_internal = Signal(True)
+    ready_internal = Signal(False)
+
+    return_objects.append(signal_assigner(reset_pb_internal, reset_pb))
+    return_objects.append(signal_assigner(pma_init_internal, pma_init))
+    return_objects.append(signal_assigner(ready_internal, ready))
+
     reset_pb_n_cycles = 128
     reset_pb_count_threshold = reset_pb_n_cycles-1
     reset_pb_count = Signal(intbv(0, 0, reset_pb_n_cycles))
@@ -60,7 +70,7 @@ def aurora_64b_66b_control(
             if reset_pb_count >= reset_pb_count_threshold:
                 # reset_pb has been high long enough for the pma_init to be
                 # set high
-                pma_init.next = True
+                pma_init_internal.next = True
                 pma_init_count.next = 0
                 state.next = t_state.INIT
 
@@ -71,7 +81,7 @@ def aurora_64b_66b_control(
         elif state == t_state.INIT:
             if pma_init_count >= pma_init_count_threshold:
                 # pma_init has been high for the required period
-                pma_init.next = False
+                pma_init_internal.next = False
                 reset_pb_count.next = 0
                 state.next = t_state.HOLD
 
@@ -82,7 +92,7 @@ def aurora_64b_66b_control(
         elif state == t_state.HOLD:
             if reset_pb_count >= reset_pb_count_threshold:
                 # reset_pb has been high for the required period
-                reset_pb.next = False
+                reset_pb_internal.next = False
                 state.next = t_state.AWAIT_CH_UP
 
             else:
@@ -92,21 +102,21 @@ def aurora_64b_66b_control(
         elif state == t_state.AWAIT_CH_UP:
             if buffered_channel_up:
                 # The aurora block has set channel up
-                ready.next = True
+                ready_internal.next = True
                 state.next = t_state.RUNNING
 
         elif state == t_state.RUNNING:
             if not buffered_channel_up:
                 # Channel has gone down
-                ready.next = False
-                reset_pb.next = True
+                ready_internal.next = False
+                reset_pb_internal.next = True
                 reset_pb_count.next = 0
                 state.next = t_state.RESET
 
         if not buffered_enable:
             # Enable has gone low
-            ready.next = False
-            reset_pb.next = True
+            ready_internal.next = False
+            reset_pb_internal.next = True
             reset_pb_count.next = 0
             state.next = t_state.RESET
 
