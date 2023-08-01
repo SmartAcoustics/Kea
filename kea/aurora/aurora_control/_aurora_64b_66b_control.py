@@ -4,11 +4,11 @@ from kea.utils import double_buffer, signal_assigner
 
 @block
 def aurora_64b_66b_control(
-    clock, enable, ready, reset_pb, pma_init, channel_up, clock_frequency):
+    clock, enable, ready, reset_pb, pma_init, clock_frequency):
     ''' This block controls the aurora power up and reset sequence.
 
-    channel_up, reset_pb and pma_init should be connected to the corresponding
-    io on the aurora block.
+    reset_pb and pma_init should be connected to the corresponding io on the
+    aurora block.
 
     clock_frequency should be the clock frequency of the the clock.
 
@@ -56,11 +56,7 @@ def aurora_64b_66b_control(
     buffered_enable = Signal(False)
     return_objects.append(double_buffer(clock, enable, buffered_enable))
 
-    buffered_channel_up = Signal(False)
-    return_objects.append(
-        double_buffer(clock, channel_up, buffered_channel_up))
-
-    t_state = enum('RESET', 'INIT', 'HOLD', 'AWAIT_CH_UP', 'RUNNING')
+    t_state = enum('RESET', 'INIT', 'HOLD', 'RUNNING')
     state = Signal(t_state.RESET)
 
     @always(clock.posedge)
@@ -93,25 +89,15 @@ def aurora_64b_66b_control(
             if reset_pb_count >= reset_pb_count_threshold:
                 # reset_pb has been high for the required period
                 reset_pb_internal.next = False
-                state.next = t_state.AWAIT_CH_UP
+                ready_internal.next = True
+                state.next = t_state.RUNNING
 
             else:
                 # Count the reset_pb period after resetting pma_init
                 reset_pb_count.next = reset_pb_count + 1
 
-        elif state == t_state.AWAIT_CH_UP:
-            if buffered_channel_up:
-                # The aurora block has set channel up
-                ready_internal.next = True
-                state.next = t_state.RUNNING
-
         elif state == t_state.RUNNING:
-            if not buffered_channel_up:
-                # Channel has gone down
-                ready_internal.next = False
-                reset_pb_internal.next = True
-                reset_pb_count.next = 0
-                state.next = t_state.RESET
+            pass
 
         if not buffered_enable:
             # Enable has gone low
