@@ -18,7 +18,6 @@ def test_args_setup():
         'clock': Signal(False),
         'enable': Signal(False),
         'ready': Signal(False),
-        'channel_up': Signal(False),
         'reset_pb': Signal(True),
         'pma_init': Signal(True),
         'clock_frequency': clock_frequency,
@@ -28,7 +27,6 @@ def test_args_setup():
         'clock': 'clock',
         'enable': 'custom',
         'ready': 'output',
-        'channel_up': 'custom',
         'reset_pb': 'output',
         'pma_init': 'output',
         'clock_frequency': 'non-signal',
@@ -142,43 +140,6 @@ class TestAurora64b66bControl(KeaTestCase):
         return return_objects
 
     @block
-    def aurora_bfm(self, stim_channel_up=False, **kwargs):
-
-        clock = kwargs['clock']
-        reset_pb = kwargs['reset_pb']
-        pma_init = kwargs['pma_init']
-        channel_up = kwargs['channel_up']
-
-        return_objects = []
-
-        @always(clock.posedge)
-        def bfm():
-
-            if stim_channel_up:
-                if channel_up:
-                    if random.random() < 0.01:
-                        # Randomly set channel_up low
-                        channel_up.next = False
-
-                else:
-                    if random.random() < 0.01:
-                        # Randomly set channel_up high
-                        channel_up.next = True
-
-            else:
-                if random.random() < 0.01:
-                    # Randomly set channel_up high
-                    channel_up.next = True
-
-            if reset_pb:
-                # channel_up is set low when reset_pb is high
-                channel_up.next = False
-
-        return_objects.append(bfm)
-
-        return return_objects
-
-    @block
     def aurora_64b_66b_control_stim(self, stim_enable=False, **kwargs):
 
         clock = kwargs['clock']
@@ -216,17 +177,12 @@ class TestAurora64b66bControl(KeaTestCase):
         ready = kwargs['ready']
         reset_pb = kwargs['reset_pb']
         pma_init = kwargs['pma_init']
-        channel_up = kwargs['channel_up']
         clock_frequency = kwargs['clock_frequency']
 
         return_objects = []
 
         buffered_enable = Signal(False)
         return_objects.append(double_buffer(clock, enable, buffered_enable))
-
-        buffered_channel_up = Signal(False)
-        return_objects.append(
-            double_buffer(clock, channel_up, buffered_channel_up))
 
         reset_pb_n_cycles = 128
         pma_init_n_cycles = clock_frequency
@@ -276,20 +232,15 @@ class TestAurora64b66bControl(KeaTestCase):
 
                     elif count == reset_pb_low_cycle-1:
                         expected_reset_pb.next = False
+                        expected_ready.next = True
 
-                elif buffered_channel_up:
-                    expected_ready.next = True
-                    count.next = 0
+                        count.next = 0
 
-                    self.test_count += 1
-                    state.next = t_state.RUNNING
+                        self.test_count += 1
+                        state.next = t_state.RUNNING
 
             elif state == t_state.RUNNING:
-                if not buffered_channel_up:
-                    expected_ready.next = False
-                    expected_reset_pb.next = True
-                    count.next = 0
-                    state.next = t_state.RESET
+                pass
 
             if not buffered_enable:
                 expected_ready.next = False
@@ -312,9 +263,7 @@ class TestAurora64b66bControl(KeaTestCase):
             - Wait for `enable` to go high.
             - Set `pma_init` low.
             - Wait 128 clock cycles.
-            - Set `reset_pb` low.
-            - Wait for `channel_up` to go high.
-            - Set `ready` high.
+            - Set `reset_pb` low and `ready` high.
         '''
 
         cycles = 5000
@@ -326,47 +275,6 @@ class TestAurora64b66bControl(KeaTestCase):
             return_objects = []
 
             return_objects.append(self.end_tests(n_tests, **kwargs))
-            return_objects.append(self.aurora_bfm(**kwargs))
-            return_objects.append(self.aurora_64b_66b_control_stim(**kwargs))
-            return_objects.append(self.aurora_64b_66b_control_check(**kwargs))
-
-            return return_objects
-
-        dut_outputs, ref_outputs = self.cosimulate(
-            cycles, aurora_64b_66b_control, aurora_64b_66b_control, self.args,
-            self.arg_types, custom_sources=[(stimulate_check, (), self.args)])
-
-        assert(self.tests_run)
-        self.assertEqual(dut_outputs, ref_outputs)
-
-    def test_channel_up(self):
-        ''' A falling edge on the `channel_up` signal should trigger the
-        `aurora_64b_66b_control` block to perform the following reset
-        sequence:
-
-            - Set `ready` low.
-            - Set `reset_pb` high.
-            - Wait 128 clock cycles.
-            - Set `pma_init` high.
-            - Wait 1 second (this equates to `clock_frequency` cycles).
-            - Set `pma_init` low.
-            - Wait 128 clock cycles.
-            - Set `reset_pb` low.
-            - Wait for `channel_up` to go high.
-            - Set `ready` high.
-        '''
-
-        cycles = 20000
-        n_tests = 20
-
-        @block
-        def stimulate_check(**kwargs):
-
-            return_objects = []
-
-            return_objects.append(self.end_tests(n_tests, **kwargs))
-            return_objects.append(
-                self.aurora_bfm(stim_channel_up=True, **kwargs))
             return_objects.append(self.aurora_64b_66b_control_stim(**kwargs))
             return_objects.append(self.aurora_64b_66b_control_check(**kwargs))
 
@@ -394,9 +302,7 @@ class TestAurora64b66bControl(KeaTestCase):
             - Wait 1 second (this equates to `clock_frequency` cycles).
             - Set `pma_init` low.
             - Wait 128 clock cycles.
-            - Set `reset_pb` low.
-            - Wait for `channel_up` to go high.
-            - Set `ready` high.
+            - Set `reset_pb` low and `ready` high.
         '''
 
         cycles = 40000
@@ -408,36 +314,6 @@ class TestAurora64b66bControl(KeaTestCase):
             return_objects = []
 
             return_objects.append(self.end_tests(n_tests, **kwargs))
-            return_objects.append(self.aurora_bfm(**kwargs))
-            return_objects.append(
-                self.aurora_64b_66b_control_stim(stim_enable=True, **kwargs))
-            return_objects.append(self.aurora_64b_66b_control_check(**kwargs))
-
-            return return_objects
-
-        dut_outputs, ref_outputs = self.cosimulate(
-            cycles, aurora_64b_66b_control, aurora_64b_66b_control, self.args,
-            self.arg_types, custom_sources=[(stimulate_check, (), self.args)])
-
-        assert(self.tests_run)
-        self.assertEqual(dut_outputs, ref_outputs)
-
-    def test_enable_and_channel_up(self):
-        ''' The `aurora_block` should respond correctly when both the `enable`
-        and `channel_up` signals are varying.
-        '''
-
-        cycles = 40000
-        n_tests = 10
-
-        @block
-        def stimulate_check(**kwargs):
-
-            return_objects = []
-
-            return_objects.append(self.end_tests(n_tests, **kwargs))
-            return_objects.append(
-                self.aurora_bfm(stim_channel_up=True, **kwargs))
             return_objects.append(
                 self.aurora_64b_66b_control_stim(stim_enable=True, **kwargs))
             return_objects.append(self.aurora_64b_66b_control_check(**kwargs))
@@ -470,8 +346,7 @@ class TestAurora64b66bControl(KeaTestCase):
 
             return_objects.append(self.end_tests(n_tests, **kwargs))
             return_objects.append(
-                self.aurora_bfm(stim_channel_up=True, **kwargs))
-            return_objects.append(self.aurora_64b_66b_control_stim(**kwargs))
+                self.aurora_64b_66b_control_stim(stim_enable=True,**kwargs))
             return_objects.append(self.aurora_64b_66b_control_check(**kwargs))
 
             return return_objects
