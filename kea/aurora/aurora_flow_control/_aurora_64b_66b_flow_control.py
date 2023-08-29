@@ -25,8 +25,6 @@ def aurora_64b_66b_flow_control(
           output).
         - The optical fibre should not be longer than 100m.
 
-    reset should be the same signal driving the aurora reset_pb signal.
-
     It is recommended to also use the reset signal to clear the FIFO.
     '''
 

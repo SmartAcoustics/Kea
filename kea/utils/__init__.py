@@ -11,6 +11,10 @@ from ._reducing_or import reducing_or
 from ._reducing_and import reducing_and
 from .logic import (
     and_gate, or_gate, not_gate, nand_gate, nor_gate, exor_gate, exnor_gate)
+from .synchronous_logic import (
+    synchronous_and_gate, synchronous_or_gate, synchronous_not_gate,
+    synchronous_nand_gate, synchronous_nor_gate, synchronous_exor_gate,
+    synchronous_exnor_gate)
 from ._sipo_shift_register import sipo_shift_register
 from ._piso_shift_register import piso_shift_register
 from ._rising_edge_detector import rising_edge_detector
