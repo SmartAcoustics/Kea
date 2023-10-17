@@ -1,0 +1,21 @@
+[project]
+name = "Kea"
+version = "0.1.0"
+description = "A collection of useful MyHdl blocks."
+authors = [
+    {name = "Toby", email = "toby.gomersall@smartacoustics.co.uk"},
+]
+dependencies = [
+    "myhdl @ git+https://github.com/myhdl/myhdl.git@ae25af4d593d20a26c85fbb17c0cd98a026e8595",
+    "Veriutils @ git+https://github.com/hgomersall/Veriutils.git",
+    "mock~=5.1.0",
+    "Ovenbird @ git+https://github.com/hgomersall/Ovenbird.git",
+    "numpy~=1.26",
+]
+requires-python = "~=3.10.12"
+readme = "README.md"
+license = {text = "BSD-3-Clause"}
+
+[build-system]
+requires = ["pdm-backend"]
+build-backend = "pdm.backend"

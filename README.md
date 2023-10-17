@@ -1,8 +1,6 @@
 # Kea
 
-Some useful HDL blocks. Currently the mainly useful stuff is an axi lite 
-register subsystem, along with supporting AXI Lite and Stream interfaces and
-associated BFMs.
+Some useful HDL blocks.
 
 The usage documentation is within the python modules and the spec is tightly
 defined (see the relevant test code for how it should work).
