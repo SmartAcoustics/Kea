@@ -9,3 +9,10 @@ Check out the `examples` directory for how to use kea, which includes quite
 a few explanatory comments. The various functions and classes are documented
 as well.
 
+## Testing
+
+To run tests in the correct environment, use:
+
+```
+pdm run python -m unittest <tests to run>
+``
