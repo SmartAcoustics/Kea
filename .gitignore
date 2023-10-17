@@ -1,3 +1,4 @@
+.pdm-python
 venv
 *.swp
 .*.swo
