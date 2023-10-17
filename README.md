@@ -14,5 +14,6 @@ as well.
 To run tests in the correct environment, use:
 
 ```
+pdm sync --clean
 pdm run python -m unittest <tests to run>
 ``
