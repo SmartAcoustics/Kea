@@ -1,0 +1,1 @@
+from ._starved_fifo_reader import starved_fifo_reader
