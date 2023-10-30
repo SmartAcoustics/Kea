@@ -7,8 +7,6 @@ authors = [
 ]
 dependencies = [
     "myhdl @ git+https://github.com/myhdl/myhdl.git@ae25af4d593d20a26c85fbb17c0cd98a026e8595",
-    "Veriutils @ git+https://github.com/hgomersall/Veriutils.git",
-    "Ovenbird @ git+https://github.com/hgomersall/Ovenbird.git",
     "numpy~=1.26",
 ]
 requires-python = "~=3.10.12"

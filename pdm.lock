@@ -6,7 +6,7 @@ groups = ["default"]
 cross_platform = true
 static_urls = false
 lock_version = "4.3"
-content_hash = "sha256:371f07cceb906ee8d7b76ecb2b3413c87ef8b3e965e80a414f88fac105baf68e"
+content_hash = "sha256:7979cdc84001f66db59d8a92eb497cc0e325bffe9bba150cd2af6aebfabd48b0"
 
 [[package]]
 name = "myhdl"
@@ -35,17 +35,3 @@ files = [
     {file = "numpy-1.26.1-pp39-pypy39_pp73-win_amd64.whl", hash = "sha256:6965888d65d2848e8768824ca8288db0a81263c1efccec881cb35a0d805fcd2f"},
     {file = "numpy-1.26.1.tar.gz", hash = "sha256:c8c6c72d4a9f831f328efb1312642a1cafafaa88981d9ab76368d50d07d93cbe"},
 ]
-
-[[package]]
-name = "ovenbird"
-version = "0.9"
-git = "https://github.com/hgomersall/Ovenbird.git"
-revision = "b709699fedd23dc510584c8338ad178ede6b8d1e"
-summary = "Tools for interacting with Vivado IP, both creatingand using."
-
-[[package]]
-name = "veriutils"
-version = "0.9"
-git = "https://github.com/hgomersall/Veriutils.git"
-revision = "2dd5b807d4bb1b1bf7595f1abf7d0d74c91876ab"
-summary = "A MyHDL verification toolkit for various things, including cosimulation using Vivado."

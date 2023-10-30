@@ -1,0 +1,2 @@
+from ._rising_edge_detector import rising_edge_detector
+from ._falling_edge_detector import falling_edge_detector
