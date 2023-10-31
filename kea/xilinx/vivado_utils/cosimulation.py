@@ -117,7 +117,8 @@ def _vivado_generic_cosimulation(
             ', '.join(AVAILABLE_TIME_UNITS))
 
     config = RawConfigParser()
-    config.read(config_file)
+    with open(config_file) as f:
+        config.read_file(f)
 
     sim_object = SynchronousTest(
         dut_factory, ref_factory, args, arg_types, period, custom_sources,
