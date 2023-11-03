@@ -7,10 +7,17 @@ def spi_slave(clock, parallel_out, data_valid, spi_sclk, spi_mosi, spi_ncs):
     length of the parallel out signal, with each bit set on a rising clock
     edge. `parallel_out` should be at least 2 bits wide.
 
-    It is assumed that the spi signals are sensibly within the clock domain
-    of `clock`. This probably means passing through a CDC (e.g. a double
-    buffer, clocked out by clock), which should be fairly transparent assuming
-    that the frequency is `clock` is substantially higher than `spi_sclk`.
+
+    It is be assumed that the SPI signals have crossed into the clock
+    domain of `clock` externally. It is up to external blocks to
+    maintain the timing invariants that are assumed by this block.
+
+    It is worth noting that generally SPI has the data and `spi_ncs` being
+    set up well in advance of the spi clock edge. As such, assuming the
+    SPI clock frequency is low enough compared to the system clock
+    frequency, it would generally be possible to use a double buffering
+    strategy for each SPI signal independently to cross the clock domain.
+
     It is assumed that spi clock period is at least four times the period
     of `clock`.
 

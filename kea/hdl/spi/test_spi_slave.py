@@ -243,6 +243,9 @@ class TestSpiSlave(KeaTestCase):
                 assert check_word == parallel_out
                 check_data_valid.next = False
 
+            else:
+                assert not data_valid
+
         return check_inner
 
     @block
@@ -365,10 +368,16 @@ class TestSpiSlave(KeaTestCase):
 
         The spi slave should read in as many bits as are determined by the
         length of the parallel out signal, with each bit set on a rising
-        edge of the spi clock, `spi_sclk` (distinct from signal `clock`).
+        edge of the SPI clock, `spi_sclk` (distinct from signal `clock`).
 
-        It can be assumed that the spi signals are sensibly within the clock
-        domain of `clock`.
+        It can be assumed that the SPI signals have crossed into the clock
+        domain of `clock` externally. It would be up to external blocks to
+        maintain the timing invariants that are assumed by the spi_slave.
+        It is worth noting that generally SPI has the data and `spi_ncs` being
+        set up well in advance of the spi clock edge. As such, assuming the
+        SPI clock frequency is low enough compared to the system clock
+        frequency, it would generally be possible to use a double buffering
+        strategy for each SPI signal independently to cross the clock domain.
 
         The data should be read in most-significant bit first.
 
@@ -400,23 +409,21 @@ class TestSpiSlave(KeaTestCase):
 
         It can be expected that `spi_ncs` is low for the whole transaction.
 
-        The above should work with the minimum SPI clock period of 4 clock
-        cycles
+        The minimum SPI clock period that should be supported is 4 cycles of
+        the system clock (`clock`) and the above should work with that.
         '''
         self.generic_test(sclk_half_period=2, delay_between_words=True)
 
     def test_single_words_written_longer_spi_clock_period(self):
-        '''The block should work as specified in
-        `single_words_written_minimal_spi_clock_period`, but with a longer
-        SPI clock period.
+        '''The block should work as specified for single words with a
+        minimum SPI clock period, but with a longer SPI clock period.
         '''
         self.generic_test(sclk_half_period=8, delay_between_words=True)
 
     def test_contiguous_words_written_minimal_spi_clock_period(self):
-        '''
-        If multiple sequence words are written with `spi_ncs` not going high,
-        the data should still be written out as expected on each completed
-        word:
+        '''If multiple sequence words are written with `spi_ncs` not going
+        high, the data should still be written out as expected on each
+        completed word:
 
         ```wavedrom
         { "signal": [
@@ -442,15 +449,16 @@ class TestSpiSlave(KeaTestCase):
         self.generic_test(sclk_half_period=2, delay_between_words=False)
 
     def test_contiguous_words_written_longer_spi_clock_period(self):
-        '''The block should work as specified in
-        `contiguous_words_written_minimal_spi_clock_period`, but with a longer
-        SPI clock period.
+        '''The block should work as specified for contiguous words with a
+        minimum SPI clock period, but with a longer SPI clock period.
         '''
         self.generic_test(sclk_half_period=10, delay_between_words=False)
 
     def test_truncated_serial_data_produces_no_output(self):
         '''If spi_ncs goes high before all the data is clocked in, then
         `data_valid` should not be set for that word.
+
+        Any data already clocked in should be dropped.
         '''
         # A word cancellation probability of 0.5 should result in a
         # cancellation sufficiently often to make sure the test is reliable
