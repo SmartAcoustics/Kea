@@ -1,6 +1,7 @@
 from .axi_stream import (
     AxiStreamInterface, AxiStreamMasterBFM, AxiStreamSlaveBFM,
-    axi_stream_buffer, axi_master_playback)
+    axi_stream_buffer, axi_master_playback,
+    check_axi_stream_interfaces_identical)
 from unittest import TestCase
 from kea.testing.myhdl import myhdl_cosimulation
 from myhdl import *
@@ -240,6 +241,136 @@ class TestAxiStreamInterface(TestCase):
 
         interface = AxiStreamInterface(TREADY_init=False)
         self.assertEqual(interface.TREADY, 0)
+
+def generate_mismatched_axi_stream_interfaces(
+    one_mismatch=False, all_mismatched=False):
+    ''' Generates two mismatched AXI stream interfaces.
+    '''
+
+    int_args = ['bus_width']
+    none_or_int_args = ['TID_width', 'TDEST_width', 'TUSER_width']
+    bool_args = [
+        'TVALID_init', 'TREADY_init', 'use_TLAST', 'use_TSTRB', 'use_TKEEP']
+
+    axi_stream_interface_args = int_args + none_or_int_args + bool_args
+
+    if one_mismatch:
+        n_mismatches = 1
+
+    elif all_mismatched:
+        n_mismatches = len(axi_stream_interface_args)
+
+    else:
+        n_mismatches = random.randrange(1, len(axi_stream_interface_args)+1)
+
+    # Select which args to mismatch
+    mismatches = random.sample(axi_stream_interface_args, n_mismatches)
+    mismatches.sort()
+
+    axis_0_args = {}
+    axis_1_args = {}
+
+    for arg_name in axi_stream_interface_args:
+
+        if arg_name in int_args:
+            # Generate 2 different random integers for the integer args
+            vals = random.sample(range(1, 9), 2)
+
+        elif arg_name in none_or_int_args:
+            # Generate 2 different random vals
+            vals = random.sample([None, 1, 2, 3, 4], 2)
+
+        elif arg_name in bool_args:
+            # Generate to different random vals for the boolean args
+            vals = random.sample([False, True], 2)
+
+        else:
+            raise ValueError('Invalid arg_name')
+
+        axis_0_args[arg_name] = vals[0]
+
+        if arg_name in mismatches:
+            # This argument should be mismatched so select the second val
+            axis_1_args[arg_name] = vals[1]
+
+        else:
+            # This argument should match so select the same val
+            axis_1_args[arg_name] = vals[0]
+
+    axis_0 = AxiStreamInterface(**axis_0_args)
+    axis_1 = AxiStreamInterface(**axis_1_args)
+
+    return axis_0, axis_1, mismatches
+
+class TestCheckAxiStreamInterfacesIdentical(TestCase):
+
+    def test_random_n_mismatch(self):
+        ''' The `check_axi_stream_interfaces_identical` function should raise
+        an error if the AXI stream interfaces passed to it are not identical.
+        '''
+
+        args = {}
+
+        args['axis_0'], args['axis_1'], expected_mismatches = (
+            generate_mismatched_axi_stream_interfaces())
+
+        self.assertRaisesRegex(
+            ValueError,
+            ('The following mismatches were detected on the AXI stream '
+             'interfaces:' + ', '.join(expected_mismatches)),
+            check_axi_stream_interfaces_identical,
+            **args,
+        )
+
+    def test_one_mismatch(self):
+        ''' The `check_axi_stream_interfaces_identical` function should raise
+        an error if the AXI stream interfaces has one mismatched parameter.
+        '''
+
+        args = {}
+
+        args['axis_0'], args['axis_1'], expected_mismatches = (
+            generate_mismatched_axi_stream_interfaces(one_mismatch=True))
+
+        self.assertRaisesRegex(
+            ValueError,
+            ('The following mismatches were detected on the AXI stream '
+             'interfaces:' + ', '.join(expected_mismatches)),
+            check_axi_stream_interfaces_identical,
+            **args,
+        )
+
+    def test_all_mismatched(self):
+        ''' The `check_axi_stream_interfaces_identical` function should raise
+        an error if none of the parameters on the AXI stream interfaces match.
+        '''
+
+        args = {}
+
+        args['axis_0'], args['axis_1'], expected_mismatches = (
+            generate_mismatched_axi_stream_interfaces(all_mismatched=True))
+
+        self.assertRaisesRegex(
+            ValueError,
+            ('The following mismatches were detected on the AXI stream '
+             'interfaces:' + ', '.join(expected_mismatches)),
+            check_axi_stream_interfaces_identical,
+            **args,
+        )
+
+    def test_pass(self):
+        ''' The `check_axi_stream_interfaces_identical` function should not
+        raise an error if the parameters on the AXI stream interfaces match.
+        '''
+
+        args = {}
+
+        args['axis_0'], _mismatched, expected_mismatches = (
+            generate_mismatched_axi_stream_interfaces(all_mismatched=True))
+
+        args['axis_1'] = copy.copy(args['axis_0'])
+
+        check_axi_stream_interfaces_identical(**args)
 
 def _get_next_val(packet_list, instance_data):
 

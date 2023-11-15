@@ -101,6 +101,46 @@ class AxiStreamInterface(object):
         else:
             self._TUSER_width = None
 
+def check_axi_stream_interfaces_identical(axis_0, axis_1):
+    ''' Raises an error if the axis interfaces do not match.
+    '''
+
+    mismatches = []
+
+    if axis_0.bus_width != axis_1.bus_width:
+        mismatches.append('bus_width')
+
+    if axis_0.TID_width != axis_1.TID_width:
+        mismatches.append('TID_width')
+
+    if axis_0.TDEST_width != axis_1.TDEST_width:
+        mismatches.append('TDEST_width')
+
+    if axis_0.TUSER_width != axis_1.TUSER_width:
+        mismatches.append('TUSER_width')
+
+    if axis_0.TVALID._init != axis_1.TVALID._init:
+        mismatches.append('TVALID_init')
+
+    if axis_0.TREADY._init != axis_1.TREADY._init:
+        mismatches.append('TREADY_init')
+
+    if hasattr(axis_0, 'TLAST') != hasattr(axis_1, 'TLAST'):
+        mismatches.append('use_TLAST')
+
+    if hasattr(axis_0, 'TSTRB') != hasattr(axis_1, 'TSTRB'):
+        mismatches.append('use_TSTRB')
+
+    if hasattr(axis_0, 'TKEEP') != hasattr(axis_1, 'TKEEP'):
+        mismatches.append('use_TKEEP')
+
+    mismatches.sort()
+
+    if len(mismatches) != 0:
+        raise ValueError(
+            'The following mismatches were detected on the AXI stream '
+            'interfaces:' + ', '.join(mismatches))
+
 class AxiStreamMasterBFM(object):
 
     def __init__(self):
