@@ -358,6 +358,20 @@ class TestCheckAxiStreamInterfacesIdentical(TestCase):
             **args,
         )
 
+    def test_pass(self):
+        ''' The `check_axi_stream_interfaces_identical` function should not
+        raise an error if the parameters on the AXI stream interfaces match.
+        '''
+
+        args = {}
+
+        args['axis_0'], _mismatched, expected_mismatches = (
+            generate_mismatched_axi_stream_interfaces(all_mismatched=True))
+
+        args['axis_1'] = copy.copy(args['axis_0'])
+
+        check_axi_stream_interfaces_identical(**args)
+
 def _get_next_val(packet_list, instance_data):
 
     try:
