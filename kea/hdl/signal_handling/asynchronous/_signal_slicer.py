@@ -9,27 +9,61 @@ def signal_slicer(signal_in, slice_offset, slice_bitwidth, signal_out):
     '''
 
     if slice_offset >= len(signal_in):
-        raise ValueError('slice_offset must be less than the signal_in width')
+        raise ValueError(
+            'signal_slicer: slice_offset should be less than the signal_in '
+            'width')
 
     if (slice_bitwidth + slice_offset) > len(signal_in):
-        raise ValueError('Slice bitfield must fit within signal_in')
+        raise ValueError(
+            'signal_slicer: Slice bitfield should fit within signal_in')
 
     if slice_bitwidth <= 0:
-        raise ValueError('slice_bitwidth must be greater than 0')
+        raise ValueError(
+            'signal_slicer: slice_bitwidth should be greater than 0')
 
     if slice_bitwidth != len(signal_out):
         raise ValueError(
-            'slice_bitwidth must be equal to the signal_out width')
+            'signal_slicer: slice_bitwidth should be equal to the signal_out '
+            'width')
 
-    if slice_bitwidth == 1:
-        @always_comb
-        def assignment():
-            signal_out.next = signal_in[slice_offset]
+    signal_out_min = signal_out.min
+
+    if signal_out_min is None:
+        # signal_out.min may return None (eg if signal_out is a bool signal).
+        # In this case we assume signal_out is unsigned.
+        signed_assignment = False
+
+    elif signal_out.min < 0:
+        signed_assignment = True
 
     else:
+        signed_assignment = False
+
+    slice_upper_bound = slice_offset + slice_bitwidth
+
+    if signed_assignment:
+
+        if 2**(slice_bitwidth-1) != signal_out.max:
+            raise ValueError(
+                'signal_slicer: signal_out.max should be equal to the '
+                'exclusive upper bound for a signed signal of '
+                'slice_bitwidth bits.')
+
+        if -2**(slice_bitwidth-1) != signal_out.min:
+            raise ValueError(
+                'signal_slicer: signal_out.min should be equal to the '
+                'inclusive lower bound for a signed signal of '
+                'slice_bitwidth bits.')
+
         @always_comb
         def assignment():
             signal_out.next = (
-                signal_in[(slice_offset + slice_bitwidth): slice_offset])
+                signal_in[slice_upper_bound: slice_offset]).signed()
+
+    else:
+
+        @always_comb
+        def assignment():
+            signal_out.next = signal_in[slice_upper_bound: slice_offset]
 
     return assignment
