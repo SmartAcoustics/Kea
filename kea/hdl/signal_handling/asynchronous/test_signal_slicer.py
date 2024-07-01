@@ -216,22 +216,19 @@ class TestSignalSlicer(KeaTestCase):
 
         return_objects = []
 
-        if signal_out.min is None:
-            signed_output = False
-            expected_output_val = Signal(intbv(0)[slice_bitwidth:0])
+        signed_output = False
+        signed_slice_negative_threshold = None
+        expected_signal_out = Signal(intbv(0)[slice_bitwidth:0])
 
-        elif signal_out.min < 0:
-            signed_output = True
-            expected_output_val = (
-                Signal(intbv(0, min=signal_out.min, max=signal_out.max)))
-
-        else:
-            signed_output = False
-            expected_output_val = Signal(intbv(0)[slice_bitwidth:0])
+        if signal_out.min is not None:
+            if signal_out.min < 0:
+                signed_output = True
+                signed_slice_negative_threshold = 2**(slice_bitwidth-1)
+                expected_signal_out = (
+                    Signal(intbv(0, min=signal_out.min, max=signal_out.max)))
 
         slice_val_upper_bound = 2**slice_bitwidth
         slice_mask = slice_val_upper_bound - 1
-
         msb_index = slice_bitwidth-1
 
         @always(clock.posedge)
@@ -240,27 +237,31 @@ class TestSignalSlicer(KeaTestCase):
             # Generate a random input value
             input_val = random.randrange(0, 2**len(signal_in))
 
-            # Randomly drive signal_in
+            # Drive signal_in with the input_val
             signal_in.next = input_val
 
-            # Shift and mask the input value to get the expected slice
-            expected_output_slice = (input_val >> slice_offset) & slice_mask
+            # Shift and mask the input_val to get the expected slice
+            expected_slice_val = (input_val >> slice_offset) & slice_mask
 
             if signed_output:
-                if (expected_output_slice >> msb_index) & 1 > 0:
-                    # The MSB is the sign bit. If it is 1 then the slice is a
-                    # negative number so we need to get it in range for the
-                    # expected_output_val signal. Subtract the slice upper
-                    # bound to get the expected_output_slice in range.
-                    expected_output_slice = (
-                        expected_output_slice - slice_val_upper_bound)
+                if (expected_slice_val >> msb_index) & 1 > 0:
+                    # The expected_slice_val should be interpreted as a signed
+                    # number. Signed numbers use the MSB as the sign bit. So
+                    # if the MSB of the expected_slice_val is set high then it
+                    # should be interpreted as negative. Myhdl will raise an
+                    # error if expected_slice_val is outside the range of
+                    # expected_signal_out. To avoid this we need to shift
+                    # expected_slice_val down into the negative range before
+                    # assigning it to expected_signal_out.
+                    expected_slice_val = (
+                        expected_slice_val - slice_val_upper_bound)
 
-            # Use the expected_output_slice to drive the expected_output_val.
+            # Use the expected_slice_val to drive the expected_signal_out.
             # This aligns expected output with the input data.
-            expected_output_val.next = expected_output_slice
+            expected_signal_out.next = expected_slice_val
 
             # Check that signal out always equals the expected output
-            assert(signal_out==expected_output_val)
+            assert(signal_out == expected_signal_out)
 
         return_objects.append(stim_check)
 
