@@ -1,11 +1,13 @@
-from ._piso_shift_register import piso_shift_register
+import random
+
+from myhdl import *
 
 from kea.testing.test_utils.base_test import (
     KeaTestCase, KeaVivadoVHDLTestCase, KeaVivadoVerilogTestCase)
 
-import random
+from ._piso_shift_register import piso_shift_register
+from ._sipo_follower_shift_register import sipo_follower_shift_register
 
-from myhdl import *
 
 class TestPISOShiftRegisterInterfaceSimulation(KeaTestCase):
 
@@ -118,34 +120,6 @@ class TestPISOShiftRegisterInterfaceSimulation(KeaTestCase):
             piso_shift_register,
             **self.args,
         )
-
-@block
-def sipo_model(
-    serial_clock, shift_reg_nreset, parallel_out_nreset, serial_data,
-    serial_latch, parallel_data):
-    ''' This block models a simple SIPO shift register.
-    '''
-
-    parallel_data_bitwidth = len(parallel_data)
-    shift_reg = Signal(intbv(0)[parallel_data_bitwidth:0])
-
-    @always(serial_clock.posedge, shift_reg_nreset.negedge)
-    def shift():
-        shift_reg.next[0] = serial_data
-        shift_reg.next[parallel_data_bitwidth:1] = (
-            shift_reg[parallel_data_bitwidth-1:0])
-
-        if not shift_reg_nreset:
-            shift_reg.next = 0
-
-    @always(serial_latch.posedge, parallel_out_nreset.negedge)
-    def latch():
-        parallel_data.next = shift_reg
-
-        if not parallel_out_nreset:
-            parallel_data.next = 0
-
-    return shift, latch
 
 @block
 def timing_checks(
@@ -411,7 +385,7 @@ class TestPISOShiftRegisterSimulation(KeaTestCase):
         data_out_latch_buffer = Signal(False)
 
         return_objects.append(
-            sipo_model(
+            sipo_follower_shift_register(
                 data_out_clock, data_out_nreset, data_out_nreset,
                 data_out, data_out_latch, written_data))
 

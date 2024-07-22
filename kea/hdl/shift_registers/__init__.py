@@ -1,2 +1,3 @@
 from ._sipo_shift_register import sipo_shift_register
 from ._piso_shift_register import piso_shift_register
+from ._sipo_follower_shift_register import sipo_follower_shift_register
