@@ -107,8 +107,13 @@ class TestVectorNot(KeaTestCase):
 
         bitwidth = len(output)
 
+        max_value = 2**bitwidth - 1
+
         @always(clock.posedge)
         def stim_check():
+
+            expected_output = max_value - input_signal
+            assert(output == expected_output)
 
             if bitwidth == 1:
                 assert(output != input_signal)
