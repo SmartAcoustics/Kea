@@ -1,7 +1,7 @@
 from myhdl import block, Signal
 
 from kea.hdl.signal_handling import de_concatenator, combined_signal_assigner
-from kea.xilinx.primitives.seven_series.buffers import xil_iobuf
+from kea.xilinx.primitives.seven_series import xil_iobuf
 
 from .interfaces import NBitsTriStateBuffersIOInterface
 

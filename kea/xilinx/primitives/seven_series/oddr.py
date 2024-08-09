@@ -73,6 +73,7 @@ def xil_oddr(
                     data_out.next = data_in_1
 
             if reset:
+                enabled.next = False
                 data_out.next = False
 
         # Verilog instantiation for conversion
@@ -161,6 +162,7 @@ def xil_oddr(
                     data_out.next = data_in_1
 
             if set_high:
+                enabled.next = False
                 data_out.next = True
 
         # Verilog instantiation for conversion
