@@ -6,15 +6,16 @@ from kea.testing.test_utils import (
     KeaTestCase, KeaVivadoVHDLTestCase, KeaVivadoVerilogTestCase,
     generate_value)
 
+from .interfaces import DeConcatenatorOutputInterface
 from ._de_concatenator import de_concatenator
 
 @block
-def de_concatenator_wrapper(clock, signal_in, output_signals):
+def de_concatenator_wrapper(clock, signal_in, output_interface):
     ''' We need to wrap the de_concatenator as the testing framework requires
     the DUT to take a clock.
     '''
 
-    return de_concatenator(signal_in, output_signals)
+    return de_concatenator(signal_in, output_interface)
 
 def wrapper_args_setup(
     signal_in_bitwidth, n_output_signals, signal_out_bitwidth):
@@ -22,20 +23,22 @@ def wrapper_args_setup(
     '''
 
     signal_in = Signal(intbv(0)[signal_in_bitwidth:])
-    output_signals = [
-        Signal(intbv(0)[signal_out_bitwidth:])
-        for n in range(n_output_signals)]
+    output_interface = (
+        DeConcatenatorOutputInterface(n_output_signals, signal_out_bitwidth))
 
     wrapper_args = {
         'clock': Signal(False),
         'signal_in': signal_in,
-        'output_signals': output_signals,
+        'output_interface': output_interface,
     }
+
+    output_interface_types = {
+        'signal_' + str(n): 'output' for n in range(n_output_signals)}
 
     wrapper_arg_types = {
         'clock': 'clock',
         'signal_in': 'custom',
-        'output_signals': 'output',
+        'output_interface': output_interface_types,
     }
 
     return wrapper_args, wrapper_arg_types
@@ -53,44 +56,29 @@ class TestDeConcatenatorInterface(KeaTestCase):
                 n_output_signals=16,
                 signal_out_bitwidth=1))
 
-    def test_empty_output_signals(self):
+    def test_invalid_output_interface(self):
         ''' The `de_concatenator` should raise an error if the
-        `output_signals` is an empty list.
+        `output_interface` is not an instance of
+        `DeConcatenatorOutputInterface`.
         '''
-        self.dut_wrapper_args['output_signals'] = []
+        self.dut_wrapper_args['output_interface'] = random.randrange(1, 100)
 
         self.assertRaisesRegex(
-            ValueError,
-            ('de_concatenator: the output_signals list is empty.'),
-            de_concatenator_wrapper,
-            **self.dut_wrapper_args
-            )
-
-    def test_mismatched_output_bitwidths(self):
-        ''' The `de_concatenator` should raise an error if the signal in the
-        `output_signals` list are not all the same size.
-        '''
-        index = random.randrange(len(self.dut_wrapper_args['output_signals']))
-        invalid_bitwidth = len(self.dut_wrapper_args['output_signals'][0]) + 1
-        self.dut_wrapper_args['output_signals'][index] = (
-            Signal(intbv(0)[invalid_bitwidth:]))
-
-        self.assertRaisesRegex(
-            ValueError,
-            ('de_concatenator: all signals in the output_signals list '
-             'should be the same bitwidth.'),
+            TypeError,
+            ('de_concatenator: the output_interface should be an instance of '
+             'DeConcatenatorOutputInterface.'),
             de_concatenator_wrapper,
             **self.dut_wrapper_args
             )
 
     def test_invalid_total_output_bitwidth(self):
         ''' The `de_concatenator` should raise an error if the total bitwidth
-        of the `output_signals` is greater than the bitwidth of `signal_in`.
+        of the `output_interface` is greater than the bitwidth of `signal_in`.
         '''
         invalid_bitwidth = (
             random.randrange(1, len(self.dut_wrapper_args['signal_in'])))
         self.dut_wrapper_args['signal_in'] = (
-            Signal)(intbv(0)[invalid_bitwidth:])
+            Signal(intbv(0)[invalid_bitwidth:]))
 
         self.assertRaisesRegex(
             ValueError,
@@ -107,14 +95,17 @@ class TestDeConcatenator(KeaTestCase):
 
         clock = dut_wrapper_args['clock']
         signal_in = dut_wrapper_args['signal_in']
-        output_signals = dut_wrapper_args['output_signals']
+        output_interface = dut_wrapper_args['output_interface']
 
         return_objects = []
 
         signal_in_upper_bound = 2**len(signal_in)
 
-        n_output_signals = len(output_signals)
-        output_signal_bitwdith = len(output_signals[0])
+        n_output_signals = output_interface.n_signals
+        output_signal_bitwdith = output_interface.signal_bitwidth
+
+        output_signals = [
+            output_interface.signal_n(n) for n in range(n_output_signals)]
 
         expected_outputs = [
             Signal(intbv(0)[output_signal_bitwdith:])
@@ -137,7 +128,7 @@ class TestDeConcatenator(KeaTestCase):
                 expected_outputs[n].next = (
                     (stim_value >> offset) & output_mask)
 
-                # Check currect outputs
+                # Check correct outputs
                 assert(output_signals[n] == expected_outputs[n])
 
         return_objects.append(stim_check)
@@ -174,23 +165,19 @@ class TestDeConcatenator(KeaTestCase):
         self.assertEqual(dut_outputs, ref_outputs)
 
     def test_one_bit_outputs_all_bits_assigned(self):
-        ''' Let `n_output_signals` be the number of signals in the
-        `output_signals` list.
+        ''' The `de_concatenator` should split the `signal_in` into
+        `output_interface.n_signals` slices of
+        `output_interface.signal_bitwidth` bits. These slices
+        should be assigned to their corresponding signal on the
+        `output_interface`.
 
-        Let `output_bitwidth` be the bit width of all the signals in the
-        `output_signals` list.
+        For example, if the `input_signal` is 8 bits wide and
+        `output_interface` contains 8 signals of 1 bit then:
 
-        The `de_concatenator` should split the `signal_in` into
-        `n_output_signals` slices of `output_bitwidth` bits. These slices
-        should be assigned to their corresponding output signal.
-
-        For example, if the `input_signal` is 8 bits wide and `output_signals`
-        contains 8 signals of 1 bit then:
-
-            - `input_signal` bit 0 -> `output_signals` signal 0.
-            - `input_signal` bit 1 -> `output_signals` signal 1.
+            - `input_signal` bit 0 -> `output_interface.signal_n(0)`.
+            - `input_signal` bit 1 -> `output_interface.signal_n(1)`.
             ...
-            - `input_signal` bit 7 -> `output_signals` signal 7.
+            - `input_signal` bit 7 -> `output_interface.signal_n(7)`.
         '''
         signal_in_bitwidth = random.randrange(2, 33)
         n_output_signals = signal_in_bitwidth
@@ -203,7 +190,7 @@ class TestDeConcatenator(KeaTestCase):
 
     def test_random_output_bitwidth_all_bits_assigned(self):
         ''' The `de_concatenator` should work correctly when the
-        `output_bitwidth` is greater than 1.
+        `output_interface.signal_bitwidth` is greater than 1.
         '''
 
         signal_out_bitwidth = random.randrange(2, 9)
@@ -217,11 +204,11 @@ class TestDeConcatenator(KeaTestCase):
 
     def test_one_bit_outputs_not_all_bits_assigned(self):
         ''' Let `total_output_bitwidth` be the sum of the bitwidths of the
-        signals in `output_signals`.
+        signals on `output_interface`.
 
         The `de_concatenator` should work correctly when the
-        `output_bitwidth` is 1 and the `total_output_bitwidth` is less than
-        bitwidth of `signal_in`.
+        `output_interface.signal_bitwidth` is 1 and the
+        `total_output_bitwidth` is less than bitwidth of `signal_in`.
 
         In this case, only the lower bits of `signal_in` should be sliced and
         assigned.
@@ -237,8 +224,8 @@ class TestDeConcatenator(KeaTestCase):
 
     def test_random_output_bitwidth_not_all_bits_assigned(self):
         ''' The `de_concatenator` should work correctly when the
-        `output_bitwidth` is greater than 1 and the `total_output_bitwidth` is
-        less than bitwidth of `signal_in`.
+        `output_interface.signal_bitwidth` is greater than 1 and the
+        `total_output_bitwidth` is less than bitwidth of `signal_in`.
         '''
         signal_out_bitwidth = random.randrange(2, 9)
         n_output_signals = random.randrange(2, 6)
@@ -254,7 +241,7 @@ class TestDeConcatenator(KeaTestCase):
 
     def test_one_bit_input_and_output(self):
         ''' The `de_concatenator` should work correctly when `signal_in` is 1
-        bit wide, and `output_signals` contains a single signal of 1 bit.
+        bit wide, and `output_interface` contains a single signal of 1 bit.
         '''
         signal_in_bitwidth = 1
         n_output_signals = 1
@@ -266,8 +253,9 @@ class TestDeConcatenator(KeaTestCase):
             signal_out_bitwidth)
 
     def test_random_output_bitwidth_input_and_output(self):
-        ''' The `de_concatenator` should work correctly when `output_signals`
-        contains a single signal which is the same bitwidth as `signal_in`.
+        ''' The `de_concatenator` should work correctly when
+        `output_interface` contains a single signal which is the same bitwidth
+        as `signal_in`.
         '''
         signal_in_bitwidth = random.randrange(2, 33)
         n_output_signals = 1
@@ -279,9 +267,9 @@ class TestDeConcatenator(KeaTestCase):
             signal_out_bitwidth)
 
     def test_single_output_smaller_than_input(self):
-        ''' The `de_concatenator` should work correctly when `output_signals`
-        contains a single signal which has a bitwidth which is less than
-        `signal_in`.
+        ''' The `de_concatenator` should work correctly when
+        `output_interface` contains a single signal which has a bitwidth which
+        is less than `signal_in`.
         '''
         signal_in_bitwidth = random.randrange(3, 33)
         n_output_signals = 1
