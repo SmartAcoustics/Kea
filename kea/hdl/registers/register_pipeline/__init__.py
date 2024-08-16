@@ -1,0 +1,1 @@
+from ._register_pipeline import register_pipeline
