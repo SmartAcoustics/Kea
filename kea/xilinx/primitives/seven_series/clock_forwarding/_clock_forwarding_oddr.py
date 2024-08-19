@@ -36,6 +36,10 @@ def clock_forwarding_oddr(
         return_objects.append(constant_assigner(True, oddr_data_0))
         return_objects.append(constant_assigner(False, oddr_data_1))
 
+    # Keep a copy of initialised for internal use
+    internal_initialised = Signal(False)
+    return_objects.append(signal_assigner(internal_initialised, initialised))
+
     # Create an ODDR block to drive the forwarded_clock. This is the
     # recommended method for forwarding a clock. The ODDR block alternates
     # between oddr_data_0 and oddr_data_1 on rising and falling edges of
@@ -55,10 +59,10 @@ def clock_forwarding_oddr(
     @always(clock.posedge)
     def init_control():
 
-        if not initialised:
+        if not internal_initialised:
             if oddr_init_count >= oddr_init_period_n_cycles:
                 # Initialisaiton period has passed
-                initialised.next = True
+                internal_initialised.next = True
 
             else:
                 # Count the initialisation period
