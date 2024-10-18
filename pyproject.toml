@@ -1,6 +1,6 @@
 [project]
 name = "Kea"
-version = "0.4.5"
+version = "0.4.6"
 description = "A collection of useful MyHdl blocks."
 authors = [
     {name = "Toby", email = "toby.gomersall@smartacoustics.co.uk"},
