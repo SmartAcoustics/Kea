@@ -1,6 +1,12 @@
+from kea.hdl.axi import AxiStreamInterface
+
 def axis_interface_attributes(axis_interface):
     ''' Extracts the attributes on the `axis_interface`.
     '''
+
+    if not isinstance(axis_interface, AxiStreamInterface):
+        raise TypeError(
+            'axis_interface should be an instance of AxiStreamInterface')
 
     attributes = {
         'bus_width': axis_interface.bus_width,
