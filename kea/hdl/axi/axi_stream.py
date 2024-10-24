@@ -362,6 +362,11 @@ class AxiStreamSlaveBFM(object):
             'TLAST': deque([]),
         }
 
+    def clear_completed_packets(self):
+        ''' Clears the completed packets.
+        '''
+        self._completed_packets.clear()
+
     def reset(self):
         '''Clears the current set of completed and current packets.
         '''
