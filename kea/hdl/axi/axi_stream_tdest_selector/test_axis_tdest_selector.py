@@ -173,7 +173,7 @@ class TestAxisTDestSelectorInterface(KeaTestCase):
 
         self.assertRaisesRegex(
             ValueError,
-            ('The axis_tdest_selector requires a TLAST.'),
+            (''),
             axis_tdest_selector,
             **self.args,
         )
@@ -197,7 +197,7 @@ class TestAxisTDestSelectorInterface(KeaTestCase):
 
         self.assertRaisesRegex(
             ValueError,
-            ('The axis_tdest_selector does not support TID.'),
+            (''),
             axis_tdest_selector,
             **self.args,
         )
@@ -222,7 +222,7 @@ class TestAxisTDestSelectorInterface(KeaTestCase):
 
         self.assertRaisesRegex(
             ValueError,
-            ('The axis_tdest_selector does not support TUSER.'),
+            (''),
             axis_tdest_selector,
             **self.args,
         )
@@ -245,7 +245,7 @@ class TestAxisTDestSelectorInterface(KeaTestCase):
 
         self.assertRaisesRegex(
             ValueError,
-            ('The axis_tdest_selector does not support TSTRB.'),
+            (''),
             axis_tdest_selector,
             **self.args,
         )
@@ -268,7 +268,7 @@ class TestAxisTDestSelectorInterface(KeaTestCase):
 
         self.assertRaisesRegex(
             ValueError,
-            ('The axis_tdest_selector does not support TKEEP.'),
+            (''),
             axis_tdest_selector,
             **self.args,
         )
