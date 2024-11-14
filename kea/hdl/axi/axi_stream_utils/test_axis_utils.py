@@ -135,6 +135,20 @@ def generate_mismatched_expected_attributes(
 
 class TestAxisInterfaceAttributes(TestCase):
 
+    def test_invalid_axis_interface(self):
+        ''' The `axis_interface_attributes` function should raise and error if
+        `axis_interface` is not an instance of `AxiStreamInterface`.
+        '''
+
+        args = {'axis_interface': random.randrange(100)}
+
+        self.assertRaisesRegex(
+            TypeError,
+            ('axis_interface should be an instance of AxiStreamInterface'),
+            axis_interface_attributes,
+            **args,
+        )
+
     def test_random(self):
         ''' The `axis_interface_attributes` function should return a dict
         containing the current attributes of the `axis_interface`. The

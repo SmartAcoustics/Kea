@@ -2164,6 +2164,68 @@ class TestAxiStreamSlaveBFM(TestCase):
             myhdl_cosimulation(
                 None, None, testbench, self.args, self.arg_types)
 
+    def test_clear_completed_packets_method(self):
+        '''There should be a clear_completed_packets method that when called
+        clears all the completed packets.
+        '''
+        @block
+        def testbench(clock):
+
+            test_sink = self.test_sink
+
+            master = self.source_stream.model(clock, self.interface)
+            slave = test_sink.model(clock, self.interface)
+
+            return master, slave
+
+        self.source_stream = AxiStreamMasterBFM()
+        self.test_sink = AxiStreamSlaveBFM()
+
+        # Interface does not have TID or TDEST therefore the DUT should
+        # set the stream_ID and stream_dest to 0 in the returned packet
+        # list
+        stream_ID = 0
+        stream_destination = 0
+        stream = (stream_ID, stream_destination)
+
+        # Create and send the packets
+        packet_list = {}
+        packet_list[stream] = _add_random_packets_to_stream(
+            self.source_stream, self.max_packet_length,
+            self.max_new_packets, self.max_rand_val)
+
+        trimmed_packet_list = trim_empty_packets_and_streams(packet_list)
+
+        # Work out how many cycles to run the first simulation for
+        cycles = sum(len(packet) for packet in packet_list[stream]) + 1
+
+        myhdl_cosimulation(
+            cycles, None, testbench, self.args, self.arg_types)
+
+        # Check that the system has received the data correctly
+        assert self.test_sink.completed_packets == trimmed_packet_list
+
+        # Create and send new data
+        packet_list.clear()
+        packet_list[stream] = _add_random_packets_to_stream(
+            self.source_stream, self.max_packet_length,
+            self.max_new_packets, self.max_rand_val)
+
+        added_trimmed_packet_list = (
+            trim_empty_packets_and_streams(packet_list))
+
+        cycles = sum(len(packet) for packet in packet_list[stream]) + 1
+
+        # Clear the old data
+        self.test_sink.clear_completed_packets()
+
+        myhdl_cosimulation(
+            cycles, None, testbench, self.args, self.arg_types)
+
+        # Check that the system does not contain the original data and only
+        # contains the new
+        self.assertEqual(self.test_sink.completed_packets,
+                         added_trimmed_packet_list)
 
     def test_reset_method(self):
         '''There should be a reset method that when called clears all the

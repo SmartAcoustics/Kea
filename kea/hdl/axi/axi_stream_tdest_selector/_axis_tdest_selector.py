@@ -1,6 +1,7 @@
 from myhdl import block, always, enum, Signal
 
 from kea.hdl.axi import AxiStreamInterface
+from kea.hdl.axi.axi_stream_utils import check_axi_stream_interface_attributes
 from kea.hdl.signal_handling import signal_assigner
 
 @block
@@ -39,33 +40,24 @@ def axis_tdest_selector(
             'axis_tdest_selector: tdest_select is too wide for '
             'axis_sink.TDEST.')
 
-    # Check axis_source and axis_sink match. Note, TDEST is excluded from this
-    # list as it it checked above
-    assert(axis_source.bus_width == axis_sink.bus_width)
-    assert(axis_source.TID_width == axis_sink.TID_width)
-    assert(axis_source.TUSER_width == axis_sink.TUSER_width)
-    assert(hasattr(axis_source, 'TLAST') == hasattr(axis_sink, 'TLAST'))
-    assert(hasattr(axis_source, 'TSTRB') == hasattr(axis_sink, 'TSTRB'))
-    assert(hasattr(axis_source, 'TKEEP') == hasattr(axis_sink, 'TKEEP'))
-
-    if not hasattr(axis_source, 'TLAST'):
-        raise ValueError('The axis_tdest_selector requires a TLAST.')
-
-    # This block does not support all of the optional AXI stream signals as
-    # they are not currently required. It should be simple to add them if
-    # required.
-
-    if axis_source.TID_width is not None:
-        raise ValueError('The axis_tdest_selector does not support TID.')
-
-    if axis_source.TUSER_width is not None:
-        raise ValueError('The axis_tdest_selector does not support TUSER.')
-
-    if hasattr(axis_source, 'TSTRB'):
-        raise ValueError('The axis_tdest_selector does not support TSTRB.')
-
-    if hasattr(axis_source, 'TKEEP'):
-        raise ValueError('The axis_tdest_selector does not support TKEEP.')
+    # Check the other axis_source and axis_sink signals match. Note, TDEST is
+    # excluded from this dict as it it checked above. This block does not
+    # support all of the optional AXI stream signals as they are not currently
+    # required. It should be simple to add them if required.
+    expected_axis_attributes = {
+        'bus_width': axis_source.bus_width,
+        'TID_width': None,
+        'TUSER_width': None,
+        'TVALID_init': False,
+        'TREADY_init': False,
+        'use_TLAST': True,
+        'use_TSTRB': False,
+        'use_TKEEP': False,
+    }
+    check_axi_stream_interface_attributes(
+        expected_axis_attributes, axis_source)
+    check_axi_stream_interface_attributes(
+        expected_axis_attributes, axis_sink)
 
     return_objects = []
 
