@@ -9,21 +9,25 @@ from ._synchronous_saturating_rounding_slicer import (
     synchronous_saturating_rounding_slicer)
 
 def test_args_setup(
-    signal_in_bitwidth, signal_out_bitwidth, slice_offset, signed_in_out):
+    signal_in_bitwidth, signal_out_bitwidth, slice_offset, signed_input,
+    signed_output):
     ''' Generate the arguments and argument types for the DUT.
     '''
 
-    if signed_in_out:
+    if signed_input:
         signal_in_max = 2**(signal_in_bitwidth-1)
         signal_in_min = -2**(signal_in_bitwidth-1)
         signal_in = Signal(intbv(0, min=signal_in_min, max=signal_in_max))
 
+    else:
+        signal_in = Signal(intbv(0)[signal_in_bitwidth:])
+
+    if signed_output:
         signal_out_max = 2**(signal_out_bitwidth-1)
         signal_out_min = -2**(signal_out_bitwidth-1)
         signal_out = Signal(intbv(0, min=signal_out_min, max=signal_out_max))
 
     else:
-        signal_in = Signal(intbv(0)[signal_in_bitwidth:])
         signal_out = Signal(intbv(0)[signal_out_bitwidth:])
 
     args = {
@@ -96,7 +100,7 @@ class TestSynchronousSaturatingRoundingSlicerInterface(KeaTestCase):
         self.dut_args, _dut_arg_types = (
             test_args_setup(
                 signal_in_bitwidth, signal_out_bitwidth, slice_offset,
-                signed_in_out=False))
+                signed_input=False, signed_output=False))
 
     def test_invalid_signal_in_type(self):
         ''' The `synchronous_saturating_rounding_slicer` should raise an error
@@ -149,56 +153,6 @@ class TestSynchronousSaturatingRoundingSlicerInterface(KeaTestCase):
             ValueError,
             ('synchronous_saturating_rounding_slicer: slice_offset should be '
              'greater than or equal to 0.'),
-            synchronous_saturating_rounding_slicer,
-            **self.dut_args,)
-
-    def test_invalid_bitfield(self):
-        ''' The `synchronous_saturating_rounding_slicer` should raise an error
-        if the sum of `slice_offset` and the bit width of `signal_out` exceeds
-        the bit width of `signal_in`.
-        '''
-        min_invalid_bitwidth = (
-            len(self.dut_args['signal_in']) -
-            self.dut_args['slice_offset'] + 1)
-        invalid_bitwidth = (
-            random.randrange(min_invalid_bitwidth, min_invalid_bitwidth+10))
-
-        self.dut_args['signal_out'] = Signal(intbv(0)[invalid_bitwidth:])
-
-        self.assertRaisesRegex(
-            ValueError,
-            ('synchronous_saturating_rounding_slicer: the slice bitfield '
-             'should fit within signal_in'),
-            synchronous_saturating_rounding_slicer,
-            **self.dut_args,)
-
-    def test_signed_input_unsigned_output(self):
-        ''' The `synchronous_saturating_rounding_slicer` should raise an error
-        if `signal_in` is signed and `signal_out` is unsigned.
-        '''
-        self.dut_args['signal_in'] = Signal(intbv(0, min=-8, max=8))
-        self.dut_args['signal_out'] = Signal(intbv(0, min=0, max=16))
-        self.dut_args['slice_offset'] = 0
-
-        self.assertRaisesRegex(
-            TypeError,
-            ('synchronous_saturating_rounding_slicer: both signal_in and '
-             'signal_out should signed or both should be unsigned.'),
-            synchronous_saturating_rounding_slicer,
-            **self.dut_args,)
-
-    def test_unsigned_input_signed_output(self):
-        ''' The `synchronous_saturating_rounding_slicer` should raise an error
-        if `signal_in` is unsigned and `signal_out` is signed.
-        '''
-        self.dut_args['signal_in'] = Signal(intbv(0, min=0, max=16))
-        self.dut_args['signal_out'] = Signal(intbv(0, min=-8, max=8))
-        self.dut_args['slice_offset'] = 0
-
-        self.assertRaisesRegex(
-            TypeError,
-            ('synchronous_saturating_rounding_slicer: both signal_in and '
-             'signal_out should signed or both should be unsigned.'),
             synchronous_saturating_rounding_slicer,
             **self.dut_args,)
 
@@ -279,49 +233,112 @@ class TestSynchronousSaturatingRoundingSlicer(KeaTestCase):
         signal_out_incl_lower_bound, signal_out_excl_upper_bound = (
             self.signal_bounds(signal_out))
 
-        shift_into_slice = slice_offset
+        # Shift the signal_out lower bound so that it ends up in the slice.
+        lowest_non_sat_val = signal_out_incl_lower_bound << slice_offset
+        # If slice_offset is not zero then the DUT will try to round. We add
+        # 1 shifted up by slice_offset to make sure we don't round down to the
+        # signal_out lower bound.
+        lowest_val_inside_range = lowest_non_sat_val + (1 << slice_offset)
+        first_low_sat_val = lowest_non_sat_val - 1
 
-        # Shift the bounds so that they end up in the slice.
-        highest_non_sat_val = (
-            (signal_out_excl_upper_bound-1) << shift_into_slice)
-        lowest_non_sat_val = signal_out_incl_lower_bound << shift_into_slice
-        first_low_sat_val = (
-            (signal_out_incl_lower_bound-1) << shift_into_slice)
-        first_high_sat_val = signal_out_excl_upper_bound << shift_into_slice
+        # Shift the signal_out max value so that it ends up in the slice
+        highest_non_sat_val = (signal_out_excl_upper_bound-1) << slice_offset
+        # If slice_offset is not zero then the DUT will try to round. We
+        # subtract 1 shifted up by slice_offset to make sure we don't round up
+        # to the signal_out max value.
+        highest_val_inside_range = highest_non_sat_val - (1 << slice_offset)
+        first_high_sat_val = highest_non_sat_val + 1
 
-        if signal_in_excl_upper_bound > highest_non_sat_val+1:
-            test_upper_saturation = True
-        else:
-            test_upper_saturation = False
+        # Set up the values_to_test with a zero, the lowest value that
+        # signal_in can take and the highest value that signal_in can take
+        values_to_test = [
+            0, signal_in_incl_lower_bound, signal_in_excl_upper_bound-1]
+
+        if signal_in_incl_lower_bound < 0:
+            # Add -1 to the values_to_test
+            values_to_test.append(-1)
+
+            if slice_offset > 0:
+                # If slice_offset is non zero then shift -1 into the integer
+                # bits and add it to the values_to_test
+                values_to_test.append(-(1 << slice_offset))
+
+        if signal_in_excl_upper_bound > 1:
+            # Add 1 to the values_to_test
+            values_to_test.append(1)
+
+            if slice_offset > 0:
+                # If slice_offset is non zero then shift 1 into the integer
+                # bits and add it to the values_to_test.
+                values_to_test.append(1 << slice_offset)
+
+        # Create ranges_to_test
+        ranges_to_test = []
 
         if signal_in_incl_lower_bound < lowest_non_sat_val:
-            test_lower_saturation = True
+            # Signal_in can take a value which is more negative than
+            # signal_out.
+
+            if lowest_non_sat_val < 0:
+                # Add a random value in a range from the lowest value that
+                # signal_out can take to 0. This is to make sure we test non
+                # saturating values
+                ranges_to_test.append((lowest_non_sat_val, 0))
+
+            # Add a range that will cause the output to saturate
+            ranges_to_test.append(
+                (signal_in_incl_lower_bound, lowest_non_sat_val))
+            # Add the lowest value which is inside the output signal range
+            values_to_test.append(lowest_val_inside_range)
+            # Add the lowest value isn't saturating
+            values_to_test.append(lowest_non_sat_val)
+            # Add the first negative saturating value
+            values_to_test.append(first_low_sat_val)
+
         else:
-            test_lower_saturation = False
-
-        # Set up specific values to test as well as the random ones
-        specific_values_to_test = [
-            0, signal_in_incl_lower_bound, (signal_in_excl_upper_bound-1)]
-
-        # Test the lowest value signal_out can take.
-        assert(lowest_non_sat_val >= signal_in_incl_lower_bound)
-        specific_values_to_test.append(lowest_non_sat_val)
-
-        # Test the highest value signal_out can take. Shift the
-        # signal_out_excl_upper_bound so that it ends up in the slice.
-        assert(highest_non_sat_val < signal_in_excl_upper_bound)
-        specific_values_to_test.append(highest_non_sat_val)
-
-        if signal_in_incl_lower_bound <= first_low_sat_val:
-            # Test the first value that is less than the signal_out range
-            specific_values_to_test.append(first_low_sat_val)
+            # The signal_in negative range is smaller than the signal_out
+            # negative range
+            if signal_in_incl_lower_bound < 0:
+                # There are negative numbers available in the signal_in range
+                # so add the negative range to ranges_to_test
+                ranges_to_test.append((signal_in_incl_lower_bound, 0))
 
         if signal_in_excl_upper_bound > first_high_sat_val:
-            # Test the first value that is greater than the signal_out range
-            specific_values_to_test.append(first_high_sat_val)
+            # Signal_in can take a larger value than signal_out.
 
-        # Remove any duplicate values in specific_values_to_test
-        specific_values_to_test = list(set(specific_values_to_test))
+            if first_high_sat_val > 0:
+                # Add a random value in a range from 0 to the highest value
+                # that signal_out can take to 0. This is to make sure we test
+                # non saturating values
+                ranges_to_test.append((0, first_high_sat_val))
+
+            # Add a range that will cause the output to saturate
+            ranges_to_test.append(
+                (first_high_sat_val, signal_in_excl_upper_bound))
+            # Add the highest value which is inside the output signal range
+            values_to_test.append(highest_val_inside_range)
+            # Add the highest value isn't saturating
+            values_to_test.append(highest_non_sat_val)
+            # Add the first positive saturating value
+            values_to_test.append(first_high_sat_val)
+
+        else:
+            # The signal_in positive range is smaller than the signal_out
+            # positive range
+            if signal_in_excl_upper_bound > 0:
+                # There are positive numbers available in the signal_in range
+                # so add the positive range to ranges_to_test
+                ranges_to_test.append((0, signal_in_excl_upper_bound))
+
+        # Remove any duplicate values in values_to_test and ranges_to_test
+        values_to_test = list(set(values_to_test))
+        ranges_to_test = list(set(ranges_to_test))
+
+        # Remove any out of range values from values_to_test
+        values_to_test = [
+            val for val in values_to_test
+            if val >= signal_in_incl_lower_bound and
+            val < signal_in_excl_upper_bound]
 
         @always(clock.posedge)
         def stim_input():
@@ -336,29 +353,19 @@ class TestSynchronousSaturatingRoundingSlicer(KeaTestCase):
 
             random_val = random.random()
 
-            if random_val < 0.25:
-                input_val = random.choice(specific_values_to_test)
+            if random_val < 0.5:
+                range_to_test = random.choice(ranges_to_test)
 
-            elif test_upper_saturation and random_val < 0.5:
-                # Test random saturating value which is greater than the
-                # signal_out range
-                input_val = (
-                    random.randrange(
-                        highest_non_sat_val+1, signal_in_excl_upper_bound))
+                # Sanity check the range_to_test only contains 2 values
+                assert(len(range_to_test) == 2)
 
-            elif test_lower_saturation and random_val < 0.75:
-                # Test random saturating value which is less than the
-                # signal_out range
+                # Generate a random value from range_to_test
                 input_val = (
-                    random.randrange(
-                        signal_in_incl_lower_bound, lowest_non_sat_val))
+                    random.randrange(range_to_test[0], range_to_test[1]))
 
             else:
-                # Test random non saturating value
-                input_val = (
-                    random.randrange(
-                        lowest_non_sat_val, highest_non_sat_val+1))
-
+                # Choose a random value_to_test
+                input_val = random.choice(values_to_test)
 
             # Drive signal_in with the input_val
             signal_in.next = input_val
@@ -409,7 +416,7 @@ class TestSynchronousSaturatingRoundingSlicer(KeaTestCase):
 
     def base_test(
         self, signal_in_bitwidth=None, signal_out_bitwidth=None,
-        slice_offset=None, signed_in_out=False):
+        slice_offset=None, signed_input=False, signed_output=False):
 
         if signal_in_bitwidth is None:
             signal_in_bitwidth = random.randrange(1, 33)
@@ -424,7 +431,7 @@ class TestSynchronousSaturatingRoundingSlicer(KeaTestCase):
         dut_args, dut_arg_types = (
             test_args_setup(
                 signal_in_bitwidth, signal_out_bitwidth, slice_offset,
-                signed_in_out))
+                signed_input, signed_output))
 
         cycles = 5000
         n_tests = 1000
@@ -448,6 +455,10 @@ class TestSynchronousSaturatingRoundingSlicer(KeaTestCase):
         self.assertTrue(self.tests_complete)
         self.assertEqual(dut_outputs, ref_outputs)
 
+    ##################################
+    # Zero offset, direct assignment #
+    ##################################
+
     def test_zero_offset_equal_range_unsigned(self):
         ''' If `slice_offset` is zero and `signal_out` has the same unsigned
         range as `signal_in`, then `signal_in` should be assigned to
@@ -458,7 +469,8 @@ class TestSynchronousSaturatingRoundingSlicer(KeaTestCase):
             signal_in_bitwidth=bitwidth,
             signal_out_bitwidth=bitwidth,
             slice_offset=0,
-            signed_in_out=False)
+            signed_input=False,
+            signed_output=False)
 
     def test_zero_offset_equal_range_signed(self):
         ''' If `slice_offset` is zero and `signal_out` has the same signed
@@ -470,7 +482,71 @@ class TestSynchronousSaturatingRoundingSlicer(KeaTestCase):
             signal_in_bitwidth=bitwidth,
             signal_out_bitwidth=bitwidth,
             slice_offset=0,
-            signed_in_out=True)
+            signed_input=True,
+            signed_output=True)
+
+    def test_zero_offset_unsigned_to_equal_upper_bound_signed(self):
+        ''' If `slice_offset` is zero and `signal_out` is signed but has the
+        same upper bound as the unsigned `signal_in`, then `signal_in` should
+        be assigned to `signal_out` without alteration.
+        '''
+        signal_in_bitwidth = random.randrange(1, 33)
+        signal_out_bitwidth = signal_in_bitwidth+1
+        self.base_test(
+            signal_in_bitwidth=signal_in_bitwidth,
+            signal_out_bitwidth=signal_out_bitwidth,
+            slice_offset=0,
+            signed_input=False,
+            signed_output=True)
+
+    def test_zero_offset_small_signed_to_bigger_signed(self):
+        ''' If `slice_offset` is zero and `signal_out` is signed but has a
+        larger range than the signed `signal_in`, then `signal_in` should
+        be assigned to `signal_out` without alteration.
+        '''
+        signal_in_bitwidth = random.randrange(1, 33)
+        signal_out_bitwidth = (
+            random.randrange(signal_in_bitwidth+1, signal_in_bitwidth+5))
+        self.base_test(
+            signal_in_bitwidth=signal_in_bitwidth,
+            signal_out_bitwidth=signal_out_bitwidth,
+            slice_offset=0,
+            signed_input=True,
+            signed_output=True)
+
+    def test_zero_offset_small_unsigned_to_bigger_unsigned(self):
+        ''' If `slice_offset` is zero and `signal_out` is unsigned but has a
+        larger range than the unsigned `signal_in`, then `signal_in` should
+        be assigned to `signal_out` without alteration.
+        '''
+        signal_in_bitwidth = random.randrange(1, 33)
+        signal_out_bitwidth = (
+            random.randrange(signal_in_bitwidth+1, signal_in_bitwidth+5))
+        self.base_test(
+            signal_in_bitwidth=signal_in_bitwidth,
+            signal_out_bitwidth=signal_out_bitwidth,
+            slice_offset=0,
+            signed_input=False,
+            signed_output=False)
+
+    def test_zero_offset_unsigned_to_greater_upper_bound_signed(self):
+        ''' If `slice_offset` is zero and `signal_out` is signed but has a
+        higher upper bound than the unsigned `signal_in`, then `signal_in`
+        should be assigned to `signal_out` without alteration.
+        '''
+        signal_in_bitwidth = random.randrange(1, 33)
+        signal_out_bitwidth = (
+            random.randrange(signal_in_bitwidth+2, signal_in_bitwidth+6))
+        self.base_test(
+            signal_in_bitwidth=signal_in_bitwidth,
+            signal_out_bitwidth=signal_out_bitwidth,
+            slice_offset=0,
+            signed_input=False,
+            signed_output=True)
+
+    ###############
+    # Zero offset #
+    ###############
 
     def test_zero_offset_smaller_out_range_unsigned(self):
         ''' If `slice_offset` is zero and `signal_out` takes a smaller range
@@ -496,7 +572,8 @@ class TestSynchronousSaturatingRoundingSlicer(KeaTestCase):
             signal_in_bitwidth=signal_in_bitwidth,
             signal_out_bitwidth=signal_out_bitwidth,
             slice_offset=0,
-            signed_in_out=False)
+            signed_input=False,
+            signed_output=False)
 
     def test_zero_offset_smaller_out_range_signed(self):
         ''' The saturation should function correctly when `slice_offset` is
@@ -509,7 +586,68 @@ class TestSynchronousSaturatingRoundingSlicer(KeaTestCase):
             signal_in_bitwidth=signal_in_bitwidth,
             signal_out_bitwidth=signal_out_bitwidth,
             slice_offset=0,
-            signed_in_out=True)
+            signed_input=True,
+            signed_output=True)
+
+    def test_zero_offset_signed_to_equal_upper_bound_unsigned(self):
+        ''' The saturation should function correctly when `slice_offset` is
+        zero and `signal_out` is unsigned but has the same upper bound as the
+        signed `signal_in`.
+
+        In this case, negative numbers on `signal_in` should cause the
+        `signal_out` to saturate at 0.
+        '''
+        signal_out_bitwidth = random.randrange(1, 33)
+        signal_in_bitwidth = signal_out_bitwidth+1
+        self.base_test(
+            signal_in_bitwidth=signal_in_bitwidth,
+            signal_out_bitwidth=signal_out_bitwidth,
+            slice_offset=0,
+            signed_input=True,
+            signed_output=False)
+
+    def test_zero_offset_unsigned_to_smaller_signed(self):
+        ''' The saturation should function correctly when `slice_offset` is
+        zero, `signal_in` is unsigned and `signal_out` is signed and has an
+        upper bound which is less than the `signal_in`.
+        '''
+        signal_in_bitwidth = random.randrange(3, 33)
+        signal_out_bitwidth = random.randrange(2, signal_in_bitwidth+1)
+        self.base_test(
+            signal_in_bitwidth=signal_in_bitwidth,
+            signal_out_bitwidth=signal_out_bitwidth,
+            slice_offset=0,
+            signed_input=False,
+            signed_output=True)
+
+    def test_zero_offset_signed_to_smaller_unsigned(self):
+        ''' The saturation should function correctly when `slice_offset` is
+        zero, `signal_in` is signed and `signal_out` is unsigned but has an
+        upper bound which is less than the `signal_in`.
+        '''
+        signal_in_bitwidth = random.randrange(4, 33)
+        signal_out_bitwidth = random.randrange(2, signal_in_bitwidth-1)
+        self.base_test(
+            signal_in_bitwidth=signal_in_bitwidth,
+            signal_out_bitwidth=signal_out_bitwidth,
+            slice_offset=0,
+            signed_input=True,
+            signed_output=False)
+
+    def test_zero_offset_signed_to_greater_upper_bound_unsigned(self):
+        ''' The saturation should function correctly when `slice_offset` is
+        zero, `signal_in` is signed and `signal_out` is unsigned but has a
+        higher upper bound than the unsigned `signal_in`.
+        '''
+        signal_in_bitwidth = random.randrange(3, 33)
+        signal_out_bitwidth = (
+            random.randrange(signal_in_bitwidth, signal_in_bitwidth+5))
+        self.base_test(
+            signal_in_bitwidth=signal_in_bitwidth,
+            signal_out_bitwidth=signal_out_bitwidth,
+            slice_offset=0,
+            signed_input=True,
+            signed_output=False)
 
     def test_zero_offset_output_bitwidth_of_one_unsigned(self):
         ''' The saturation should function correctly when `slice_offset` is
@@ -522,7 +660,8 @@ class TestSynchronousSaturatingRoundingSlicer(KeaTestCase):
             signal_in_bitwidth=signal_in_bitwidth,
             signal_out_bitwidth=signal_out_bitwidth,
             slice_offset=0,
-            signed_in_out=False)
+            signed_input=False,
+            signed_output=False)
 
     def test_zero_offset_output_bitwidth_of_one_signed(self):
         ''' The saturation should function correctly when `slice_offset` is
@@ -535,33 +674,8 @@ class TestSynchronousSaturatingRoundingSlicer(KeaTestCase):
             signal_in_bitwidth=signal_in_bitwidth,
             signal_out_bitwidth=signal_out_bitwidth,
             slice_offset=0,
-            signed_in_out=True)
-
-    def test_zero_offset_large_output_bitwidth_unsigned(self):
-        ''' The saturation should function correctly when `slice_offset` is
-        zero, the bitwidth of `signal_out` is 1 bit less than the bitwidth of
-        `signal_in` and both `signal_in` and `signal_out` are unsigned.
-        '''
-        signal_in_bitwidth = random.randrange(3, 33)
-        signal_out_bitwidth = signal_in_bitwidth - 1
-        self.base_test(
-            signal_in_bitwidth=signal_in_bitwidth,
-            signal_out_bitwidth=signal_out_bitwidth,
-            slice_offset=0,
-            signed_in_out=False)
-
-    def test_zero_offset_large_output_bitwidth_signed(self):
-        ''' The saturation should function correctly when `slice_offset` is
-        zero, the bitwidth of `signal_out` is 1 bit less than the bitwidth of
-        `signal_in` and both `signal_in` and `signal_out` are signed.
-        '''
-        signal_in_bitwidth = random.randrange(3, 33)
-        signal_out_bitwidth = signal_in_bitwidth - 1
-        self.base_test(
-            signal_in_bitwidth=signal_in_bitwidth,
-            signal_out_bitwidth=signal_out_bitwidth,
-            slice_offset=0,
-            signed_in_out=True)
+            signed_input=True,
+            signed_output=True)
 
     def test_zero_offset_input_bitwidth_two_unsigned(self):
         ''' The saturation should function correctly when `slice_offset` is
@@ -574,7 +688,8 @@ class TestSynchronousSaturatingRoundingSlicer(KeaTestCase):
             signal_in_bitwidth=signal_in_bitwidth,
             signal_out_bitwidth=signal_out_bitwidth,
             slice_offset=0,
-            signed_in_out=False)
+            signed_input=False,
+            signed_output=False)
 
     def test_zero_offset_input_bitwidth_two_signed(self):
         ''' The saturation should function correctly when `slice_offset` is
@@ -587,7 +702,8 @@ class TestSynchronousSaturatingRoundingSlicer(KeaTestCase):
             signal_in_bitwidth=signal_in_bitwidth,
             signal_out_bitwidth=signal_out_bitwidth,
             slice_offset=0,
-            signed_in_out=True)
+            signed_input=True,
+            signed_output=True)
 
     def test_zero_offset_large_bounds(self):
         ''' The `synchronous_saturating_rounding_slicer` should function
@@ -604,23 +720,29 @@ class TestSynchronousSaturatingRoundingSlicer(KeaTestCase):
             signal_in_bitwidth=signal_in_bitwidth,
             signal_out_bitwidth=signal_out_bitwidth,
             slice_offset=0,
-            signed_in_out=True)
+            signed_input=True,
+            signed_output=True)
 
-    def test_rounding_and_saturation_unsigned(self):
+    ###################
+    # Non zero offset #
+    ###################
+
+    def test_smaller_out_range_unsigned(self):
         '''  If `slice_offset` is not zero, then `signal_in` should be
         assigned to `signal_out` with rounding and saturation.
 
         Lets call the bits up to `slice_offset` the fractional bits.
 
-        If, after slicing off the fractional bits, the `signal_in` is greater
-        than or equal to the maximum value that `signal_out` can take, the
+        Lets call the rest of the bits the integer bits.
+
+        If the integer bits are greater than or equal to the maximum value
+        that `signal_out` can take, the
         `synchronous_saturating_rounding_slicer` block should saturate
         `signal_out` at its maximum value.
 
-        If, after slicing off the fractional bits, the `signal_in` is less
-        than the minimum value that `signal_out` can take, the
-        `synchronous_saturating_rounding_slicer` block should saturate
-        `signal_out` at its minimum value.
+        If the integer bits are less than the minimum value that `signal_out`
+        can take, the `synchronous_saturating_rounding_slicer` block should
+        saturate `signal_out` at its minimum value.
 
         If the output has not saturated, the
         `synchronous_saturating_rounding_slicer` block should round the slice
@@ -639,7 +761,8 @@ class TestSynchronousSaturatingRoundingSlicer(KeaTestCase):
         Otherwise the value on `signal_in` should be assigned to `signal_out`.
 
         The saturation and rounding should function correctly when `signal_in`
-        and `signal_out` are both unsigned.
+        and `signal_out` are both unsigned and the `signal_out` range is
+        smaller than the range of the integer bits.
         '''
         signal_in_bitwidth = random.randrange(5, 33)
         signal_out_bitwidth = random.randrange(2, signal_in_bitwidth-2)
@@ -649,24 +772,224 @@ class TestSynchronousSaturatingRoundingSlicer(KeaTestCase):
             signal_in_bitwidth=signal_in_bitwidth,
             signal_out_bitwidth=signal_out_bitwidth,
             slice_offset=slice_offset,
-            signed_in_out=False)
+            signed_input=False,
+            signed_output=False)
 
-    def test_rounding_and_saturation_signed(self):
+    def test_smaller_out_range_signed(self):
         ''' The saturation and rounding should function correctly when
         `slice_offset` is not zero and both `signal_in` and `signal_out` are
-        signed.
+        signed and the `signal_out` range is smaller than the range of the
+        integer bits.
         '''
         signal_in_bitwidth = random.randrange(5, 33)
         signal_out_bitwidth = random.randrange(2, signal_in_bitwidth-2)
         slice_offset = (
             random.randrange(1, signal_in_bitwidth-signal_out_bitwidth-1))
+
         self.base_test(
             signal_in_bitwidth=signal_in_bitwidth,
             signal_out_bitwidth=signal_out_bitwidth,
             slice_offset=slice_offset,
-            signed_in_out=True)
+            signed_input=True,
+            signed_output=True)
 
-    def test_slice_offset_one_rounding_and_saturation_unsigned(self):
+    def test_equal_out_range_unsigned(self):
+        ''' The rounding should function correctly when `slice_offset` is not
+        zero and both `signal_in` and `signal_out` are unsigned and the
+        `signal_out` range is equal to the range of the integer bits.
+
+        Note that saturation will not be required in these circumstances.
+        '''
+        signal_in_bitwidth = random.randrange(5, 33)
+        slice_offset = random.randrange(1, signal_in_bitwidth-1)
+        signal_out_bitwidth = signal_in_bitwidth - slice_offset
+        self.base_test(
+            signal_in_bitwidth=signal_in_bitwidth,
+            signal_out_bitwidth=signal_out_bitwidth,
+            slice_offset=slice_offset,
+            signed_input=False,
+            signed_output=False)
+
+    def test_equal_out_range_signed(self):
+        ''' The rounding should function correctly when `slice_offset` is not
+        zero and both `signal_in` and `signal_out` are signed and the
+        `signal_out` range is equal to the range of the integer bits.
+
+        Note that saturation will not be required in these circumstances.
+        '''
+        signal_in_bitwidth = random.randrange(5, 33)
+        slice_offset = random.randrange(1, signal_in_bitwidth-1)
+        signal_out_bitwidth = signal_in_bitwidth - slice_offset
+        self.base_test(
+            signal_in_bitwidth=signal_in_bitwidth,
+            signal_out_bitwidth=signal_out_bitwidth,
+            slice_offset=slice_offset,
+            signed_input=True,
+            signed_output=True)
+
+    def test_unsigned_to_equal_upper_bound_signed(self):
+        ''' The rounding should function correctly when `slice_offset` is not
+        zero and `signal_out` is signed but has the same upper bound as the
+        integer bits.
+
+        Note that saturation will not be required in these circumstances.
+        '''
+        signal_in_bitwidth = random.randrange(5, 33)
+        signal_out_bitwidth = signal_in_bitwidth+1
+        slice_offset = random.randrange(1, signal_in_bitwidth-1)
+        self.base_test(
+            signal_in_bitwidth=signal_in_bitwidth,
+            signal_out_bitwidth=signal_out_bitwidth,
+            slice_offset=slice_offset,
+            signed_input=False,
+            signed_output=True)
+
+    def test_signed_to_equal_upper_bound_unsigned(self):
+        ''' The saturating and rounding should function correctly when
+        `slice_offset` is not zero and `signal_out` is unsigned but has the
+        same upper bound as the integer bits.
+
+        Note negative numbers on `signal_in` will saturate the `signal_out` at
+        0. There will be no positive saturation in these cirumstances.
+        '''
+        signal_out_bitwidth = random.randrange(5, 33)
+        signal_in_bitwidth = signal_out_bitwidth+1
+        slice_offset = random.randrange(1, signal_in_bitwidth-1)
+        self.base_test(
+            signal_in_bitwidth=signal_in_bitwidth,
+            signal_out_bitwidth=signal_out_bitwidth,
+            slice_offset=slice_offset,
+            signed_input=True,
+            signed_output=False)
+
+    def test_small_signed_to_bigger_signed(self):
+        ''' The rounding should function correctly when `slice_offset` is not
+        zero and `signal_out` is signed but has a greater range than the
+        integer bits.
+
+        Note that saturation will not be required in these circumstances.
+        '''
+        signal_in_bitwidth = random.randrange(3, 33)
+        slice_offset = random.randrange(1, signal_in_bitwidth-1)
+
+        n_integer_bits = signal_in_bitwidth-slice_offset
+        signal_out_bitwidth = (
+            random.randrange(n_integer_bits+1, n_integer_bits+5))
+
+        self.base_test(
+            signal_in_bitwidth=signal_in_bitwidth,
+            signal_out_bitwidth=signal_out_bitwidth,
+            slice_offset=slice_offset,
+            signed_input=True,
+            signed_output=True)
+
+    def test_small_unsigned_to_bigger_unsigned(self):
+        ''' The rounding should function correctly when `slice_offset` is not
+        zero and `signal_out` is unsigned but has a greater range than the
+        integer bits.
+
+        Note that saturation will not be required in these circumstances.
+        '''
+        signal_in_bitwidth = random.randrange(3, 33)
+        slice_offset = random.randrange(1, signal_in_bitwidth-1)
+
+        n_integer_bits = signal_in_bitwidth-slice_offset
+        signal_out_bitwidth = (
+            random.randrange(n_integer_bits+1, n_integer_bits+5))
+
+        self.base_test(
+            signal_in_bitwidth=signal_in_bitwidth,
+            signal_out_bitwidth=signal_out_bitwidth,
+            slice_offset=slice_offset,
+            signed_input=False,
+            signed_output=False)
+
+    def test_unsigned_to_smaller_signed(self):
+        ''' The saturating and rounding should function correctly when
+        `slice_offset` is not zero and `signal_out` is signed and has a
+        smaller upper bound than the integer bits.
+
+        Note Large positive numbers on `signal_in` will saturate `signal_out`
+        positively.
+        '''
+        signal_in_bitwidth = random.randrange(3, 33)
+        slice_offset = random.randrange(1, signal_in_bitwidth-1)
+
+        n_integer_bits = signal_in_bitwidth-slice_offset
+        signal_out_bitwidth = random.randrange(1, n_integer_bits)
+
+        self.base_test(
+            signal_in_bitwidth=signal_in_bitwidth,
+            signal_out_bitwidth=signal_out_bitwidth,
+            slice_offset=slice_offset,
+            signed_input=False,
+            signed_output=True)
+
+    def test_unsigned_to_bigger_signed(self):
+        ''' The rounding should function correctly when `slice_offset` is not
+        zero and `signal_out` is signed and has a bigger upper bound than the
+        integer bits.
+
+        Note that saturation will not be required in these circumstances.
+        '''
+        signal_in_bitwidth = random.randrange(3, 33)
+        slice_offset = random.randrange(1, signal_in_bitwidth-1)
+
+        n_integer_bits = signal_in_bitwidth-slice_offset
+        signal_out_bitwidth = (
+            random.randrange(n_integer_bits+2, n_integer_bits+6))
+
+        self.base_test(
+            signal_in_bitwidth=signal_in_bitwidth,
+            signal_out_bitwidth=signal_out_bitwidth,
+            slice_offset=slice_offset,
+            signed_input=False,
+            signed_output=True)
+
+    def test_signed_to_bigger_unsigned(self):
+        ''' The saturating and rounding should function correctly when
+        `slice_offset` is not zero and `signal_out` is unsigned but has a
+        greater upper bound than the integer bits.
+
+        Note negative numbers on `signal_in` will saturate the `signal_out` at
+        0. There will be no positive saturation in these cirumstances.
+        '''
+        signal_in_bitwidth = random.randrange(3, 33)
+        slice_offset = random.randrange(1, signal_in_bitwidth-1)
+
+        n_integer_bits = signal_in_bitwidth-slice_offset
+        signal_out_bitwidth = (
+            random.randrange(n_integer_bits+1, n_integer_bits+5))
+
+        self.base_test(
+            signal_in_bitwidth=signal_in_bitwidth,
+            signal_out_bitwidth=signal_out_bitwidth,
+            slice_offset=slice_offset,
+            signed_input=True,
+            signed_output=False)
+
+    def test_signed_to_smaller_unsigned(self):
+        ''' The saturating and rounding should function correctly when
+        `slice_offset` is not zero and `signal_out` is unsigned and has a
+        smaller upper bound than the integer bits.
+
+        Note negative numbers on `signal_in` will saturate the `signal_out` at
+        0. Large positive numbers will saturate positively.
+        '''
+        signal_in_bitwidth = random.randrange(3, 33)
+        slice_offset = random.randrange(1, signal_in_bitwidth-1)
+
+        n_integer_bits = signal_in_bitwidth-slice_offset
+        signal_out_bitwidth = random.randrange(1, n_integer_bits)
+
+        self.base_test(
+            signal_in_bitwidth=signal_in_bitwidth,
+            signal_out_bitwidth=signal_out_bitwidth,
+            slice_offset=slice_offset,
+            signed_input=True,
+            signed_output=False)
+
+    def test_slice_offset_one_unsigned(self):
         ''' The saturation and rounding should function correctly when
         `slice_offset` is one and both `signal_in` and `signal_out` are
         unsigned.
@@ -678,9 +1001,10 @@ class TestSynchronousSaturatingRoundingSlicer(KeaTestCase):
             signal_in_bitwidth=signal_in_bitwidth,
             signal_out_bitwidth=signal_out_bitwidth,
             slice_offset=slice_offset,
-            signed_in_out=False)
+            signed_input=False,
+            signed_output=False)
 
-    def test_slice_offset_one_rounding_and_saturation_signed(self):
+    def test_slice_offset_one_signed(self):
         ''' The saturation and rounding should function correctly when
         `slice_offset` is one and both `signal_in` and `signal_out` are
         signed.
@@ -692,37 +1016,10 @@ class TestSynchronousSaturatingRoundingSlicer(KeaTestCase):
             signal_in_bitwidth=signal_in_bitwidth,
             signal_out_bitwidth=signal_out_bitwidth,
             slice_offset=slice_offset,
-            signed_in_out=True)
+            signed_input=True,
+            signed_output=True)
 
-    def test_max_slice_offset_rounding_and_saturation_unsigned(self):
-        ''' The saturation and rounding should function correctly when
-        `slice_offset` is equal to the bitwidth of `signal_in` and both
-        `signal_in` and `signal_out` are unsigned.
-        '''
-        signal_in_bitwidth = random.randrange(3, 33)
-        signal_out_bitwidth = 1
-        slice_offset = signal_in_bitwidth - 1
-        self.base_test(
-            signal_in_bitwidth=signal_in_bitwidth,
-            signal_out_bitwidth=signal_out_bitwidth,
-            slice_offset=slice_offset,
-            signed_in_out=False)
-
-    def test_max_slice_offset_rounding_and_saturation_signed(self):
-        ''' The saturation and rounding should function correctly when
-        `slice_offset` is equal to the bitwidth of `signal_in` and both
-        `signal_in` and `signal_out` are signed.
-        '''
-        signal_in_bitwidth = random.randrange(3, 33)
-        signal_out_bitwidth = 1
-        slice_offset = signal_in_bitwidth - 1
-        self.base_test(
-            signal_in_bitwidth=signal_in_bitwidth,
-            signal_out_bitwidth=signal_out_bitwidth,
-            slice_offset=slice_offset,
-            signed_in_out=True)
-
-    def test_output_bitwidth_one_rounding_and_saturation_unsigned(self):
+    def test_output_bitwidth_one_unsigned(self):
         ''' The saturation and rounding should function correctly when
         the bitwidth of `signal_out` is one and both `signal_in` and
         `signal_out` are unsigned.
@@ -734,9 +1031,10 @@ class TestSynchronousSaturatingRoundingSlicer(KeaTestCase):
             signal_in_bitwidth=signal_in_bitwidth,
             signal_out_bitwidth=signal_out_bitwidth,
             slice_offset=slice_offset,
-            signed_in_out=False)
+            signed_input=False,
+            signed_output=False)
 
-    def test_output_bitwidth_one_rounding_and_saturation_signed(self):
+    def test_output_bitwidth_one_signed(self):
         ''' The saturation and rounding should function correctly when
         the bitwidth of `signal_out` is one and both `signal_in` and
         `signal_out` are signed.
@@ -748,65 +1046,8 @@ class TestSynchronousSaturatingRoundingSlicer(KeaTestCase):
             signal_in_bitwidth=signal_in_bitwidth,
             signal_out_bitwidth=signal_out_bitwidth,
             slice_offset=slice_offset,
-            signed_in_out=True)
-
-    def test_large_output_bitwidth_rounding_and_saturation_unsigned(self):
-        ''' The saturation and rounding should function correctly when
-        the bitwidth of `signal_out` is one less than `signal_in` and both
-        `signal_in` and `signal_out` are unsigned.
-        '''
-        signal_in_bitwidth = random.randrange(3, 33)
-        signal_out_bitwidth = signal_in_bitwidth - 1
-        slice_offset = 1
-        self.base_test(
-            signal_in_bitwidth=signal_in_bitwidth,
-            signal_out_bitwidth=signal_out_bitwidth,
-            slice_offset=slice_offset,
-            signed_in_out=False)
-
-    def test_large_output_bitwidth_rounding_and_saturation_signed(self):
-        ''' The saturation and rounding should function correctly when
-        the bitwidth of `signal_out` is one less than `signal_in` and both
-        `signal_in` and `signal_out` are signed.
-        '''
-        signal_in_bitwidth = random.randrange(3, 33)
-        signal_out_bitwidth = signal_in_bitwidth - 1
-        slice_offset = 1
-        self.base_test(
-            signal_in_bitwidth=signal_in_bitwidth,
-            signal_out_bitwidth=signal_out_bitwidth,
-            slice_offset=slice_offset,
-            signed_in_out=True)
-
-    def test_high_slice_rounding_and_saturation_unsigned(self):
-        ''' The saturation and rounding should function correctly when the
-        combination of `slice_offset` and `signal_out` bitwidth places the
-        slice in the top bits of `signal_in` and both `signal_in` and
-        `signal_out` are unsigned.
-        '''
-        signal_in_bitwidth = random.randrange(4, 33)
-        signal_out_bitwidth = random.randrange(2, signal_in_bitwidth)
-        slice_offset = signal_in_bitwidth - signal_out_bitwidth
-        self.base_test(
-            signal_in_bitwidth=signal_in_bitwidth,
-            signal_out_bitwidth=signal_out_bitwidth,
-            slice_offset=slice_offset,
-            signed_in_out=False)
-
-    def test_high_slice_rounding_and_saturation_signed(self):
-        ''' The saturation and rounding should function correctly when the
-        combination of `slice_offset` and `signal_out` bitwidth places the
-        slice in the top bits of `signal_in` and both `signal_in` and
-        `signal_out` are signed.
-        '''
-        signal_in_bitwidth = random.randrange(4, 33)
-        signal_out_bitwidth = random.randrange(2, signal_in_bitwidth)
-        slice_offset = signal_in_bitwidth - signal_out_bitwidth
-        self.base_test(
-            signal_in_bitwidth=signal_in_bitwidth,
-            signal_out_bitwidth=signal_out_bitwidth,
-            slice_offset=slice_offset,
-            signed_in_out=True)
+            signed_input=True,
+            signed_output=True)
 
     def test_input_bitwidth_two_unsigned(self):
         ''' The saturation and rounding should function correctly when
@@ -820,7 +1061,8 @@ class TestSynchronousSaturatingRoundingSlicer(KeaTestCase):
             signal_in_bitwidth=signal_in_bitwidth,
             signal_out_bitwidth=signal_out_bitwidth,
             slice_offset=slice_offset,
-            signed_in_out=False)
+            signed_input=False,
+            signed_output=False)
 
     def test_input_bitwidth_two_signed(self):
         ''' The saturation and rounding should function correctly when
@@ -835,7 +1077,8 @@ class TestSynchronousSaturatingRoundingSlicer(KeaTestCase):
             signal_in_bitwidth=signal_in_bitwidth,
             signal_out_bitwidth=signal_out_bitwidth,
             slice_offset=slice_offset,
-            signed_in_out=True)
+            signed_input=True,
+            signed_output=True)
 
     def test_large_bounds(self):
         ''' The `synchronous_saturating_rounding_slicer` should function
@@ -853,7 +1096,8 @@ class TestSynchronousSaturatingRoundingSlicer(KeaTestCase):
             signal_in_bitwidth=signal_in_bitwidth,
             signal_out_bitwidth=signal_out_bitwidth,
             slice_offset=slice_offset,
-            signed_in_out=True)
+            signed_input=True,
+            signed_output=True)
 
 class TestSynchronousSaturatingRoundingSlicerVivadoVhdl(
     KeaVivadoVHDLTestCase, TestSynchronousSaturatingRoundingSlicer):
