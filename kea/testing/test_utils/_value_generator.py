@@ -72,7 +72,7 @@ def generate_value_with_preferences(
 
     assert(upper_bound > lower_bound)
 
-    assert(all(i > lower_bound for i in preferences))
+    assert(all(i >= lower_bound for i in preferences))
     assert(all(i < upper_bound for i in preferences))
 
     assert(p_preferences <= 1)
