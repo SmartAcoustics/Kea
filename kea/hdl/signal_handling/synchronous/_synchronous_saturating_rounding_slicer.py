@@ -68,34 +68,6 @@ def synchronous_saturating_rounding_slicer(
     offset of the slice is set by `slice_offset`. The length of the slice is
     set by the length of `signal_out`.
 
-    No saturating or rounding
-    =========================
-
-    If `slice_offset` is 0 and `signal_out` can handle the full range of
-    `signal_in` then this block will assign `signal_in` to `signal_out`
-    unaltered.
-
-    Saturating only
-    ===============
-
-    If `slice_offset` is 0 and `signal_out` can NOT handle the full range of
-    `signal_in` then this block will assign `signal_in` to `signal_out` with
-    saturation.
-
-    If the value on `signal_in` is greater than the maximum value that
-    `signal_out` can take, this block will saturate the `signal_out` at its
-    maximum value.
-
-    If the value on `signal_in` is less than the minimum value that
-    `signal_out` can take, this block will saturate the `signal_out` at its
-    minimum value.
-
-    Saturating and rounding
-    =======================
-
-    If `slice_offset` is greater than 0 then this block will round and
-    saturate the slice before assigning to `signal_out`.
-
     Lets call the bits up to `slice_offset` the fractional bits.
 
     If, after slicing off the fractional bits, the `signal_in` is greater than
@@ -113,6 +85,8 @@ def synchronous_saturating_rounding_slicer(
     are less than half the range of the fractional bits, then this block will
     round down. If the fractional bits equal half the range of the fractional
     bits then this block will round to the closest even value.
+
+    If `slice_offset` is 0 then this block will not perform any rounding.
     '''
 
     input_bitwidth = len(signal_in)
@@ -137,11 +111,6 @@ def synchronous_saturating_rounding_slicer(
         raise ValueError(
             'synchronous_saturating_rounding_slicer: slice_offset should be '
             'greater than or equal to 0.')
-
-    if (output_bitwidth + slice_offset) > input_bitwidth:
-        raise ValueError(
-            'synchronous_saturating_rounding_slicer: the slice bitfield '
-            'should fit within signal_in')
 
     return_objects = []
 
@@ -168,12 +137,6 @@ def synchronous_saturating_rounding_slicer(
         # signal_in is unsigned
         assert(signal_in_lower_bound == 0)
         signed_signal_in = False
-
-    if (signed_signal_in and not signed_signal_out or
-        not signed_signal_in and signed_signal_out):
-        raise TypeError(
-            'synchronous_saturating_rounding_slicer: both signal_in and '
-            'signal_out should signed or both should be unsigned.')
 
     if slice_offset == 0:
 
@@ -236,33 +199,29 @@ def synchronous_saturating_rounding_slicer(
                 signal_in, fractional_slice_offset, fractional_slice_bitwidth,
                 fractional_slice))
 
-        saturation_slice_bitwidth = input_bitwidth - slice_offset
+        # The integer_slice is all the bits remaining after taking off the
+        # fractional bits.
+        integer_slice_bitwidth = input_bitwidth - slice_offset
 
-        if signed_signal_out:
-            # Signal out is signed so saturation_slice needs to be signed
-            saturation_slice_lower_bound = -2**(saturation_slice_bitwidth-1)
-            saturation_slice_upper_bound = 2**(saturation_slice_bitwidth-1)
+        if signed_signal_in:
+            # Signal in is signed so integer_slice needs to be signed
+            integer_slice_lower_bound = -2**(integer_slice_bitwidth-1)
+            integer_slice_upper_bound = 2**(integer_slice_bitwidth-1)
 
         else:
-            assert(signal_out_lower_bound == 0)
-            saturation_slice_lower_bound = 0
-            saturation_slice_upper_bound = 2**saturation_slice_bitwidth
+            assert(signal_in_lower_bound == 0)
 
-        saturation_slice = (
+            integer_slice_lower_bound = 0
+            integer_slice_upper_bound = 2**integer_slice_bitwidth
+
+        integer_slice = (
             Signal(intbv(
-                0, min=saturation_slice_lower_bound,
-                max=saturation_slice_upper_bound)))
+                0, min=integer_slice_lower_bound,
+                max=integer_slice_upper_bound)))
         return_objects.append(
             signal_slicer(
-                signal_in, slice_offset, saturation_slice_bitwidth,
-                saturation_slice))
-
-        source_slice = (
-            Signal(intbv(
-                0, min=signal_out_lower_bound, max=signal_out_upper_bound)))
-        return_objects.append(
-            signal_slicer(
-                signal_in, slice_offset, output_bitwidth, source_slice))
+                signal_in, slice_offset, integer_slice_bitwidth,
+                integer_slice))
 
         signal_out_upper_saturation = signal_out_upper_bound - 1
         signal_out_lower_saturation = signal_out_lower_bound
@@ -281,38 +240,38 @@ def synchronous_saturating_rounding_slicer(
 
             if enable:
 
-                if saturation_slice >= signal_out_upper_saturation_const:
+                if integer_slice >= signal_out_upper_saturation_const:
                     # After removing the fractional bits, the signal_in is
                     # greater than or equal to the maximum value that
                     # signal_out can take so we saturate the output with the
-                    # maximum value. Note: If  signal_out is already at the
+                    # maximum value. Note: If signal_out is already at the
                     # signal_out_upper_saturation then it cannot be rounded up
                     # so we saturate and avoid any attempt to round up.
                     signal_out.next = signal_out_upper_saturation
 
-                elif saturation_slice < signal_out_lower_bound_const:
+                elif integer_slice < signal_out_lower_bound_const:
                     # After removing the fractional bits, signal_in is less
                     # than the inclusive lower bound of signal_in so we
                     # saturate the output with the minimum value it can take.
                     signal_out.next = signal_out_lower_saturation
 
                 elif (fractional_slice == half_fractional_range_const and
-                      source_slice[0]):
+                      integer_slice[0]):
                     # Round half up to even
-                    signal_out.next = source_slice + 1
+                    signal_out.next = integer_slice + 1
 
                 elif (fractional_slice == half_fractional_range_const and
-                      not source_slice[0]):
+                      not integer_slice[0]):
                     # Round half down to even
-                    signal_out.next = source_slice
+                    signal_out.next = integer_slice
 
                 elif fractional_slice > half_fractional_range_const:
                     # Round up
-                    signal_out.next = source_slice + 1
+                    signal_out.next = integer_slice + 1
 
                 else:
                     # Round down
-                    signal_out.next = source_slice
+                    signal_out.next = integer_slice
 
         return_objects.append(slicer)
 
