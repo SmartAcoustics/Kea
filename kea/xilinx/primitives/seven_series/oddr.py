@@ -27,6 +27,11 @@ def xil_oddr(
     # driven on the next rising edge of clock. When clock_enable goes low,
     # data_out holds its current value.
 
+    # NOTE: From observation, the ODDR is unresponsive for 10 cycles after
+    # power on. The controlling system should handle this initialisation
+    # period. The initialisation period only applies after power on, it seems
+    # it does not apply after a reset.
+
     global oddr_block_count
 
     # Need to specify if the signals are inputs or outputs for the conversion
