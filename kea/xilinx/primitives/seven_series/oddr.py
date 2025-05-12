@@ -39,6 +39,8 @@ def xil_oddr(
     inst_count = oddr_block_count
     oddr_block_count += 1
 
+    falling_edge_data = Signal(False)
+
     if reset is not None and set_high is not None:
         raise ValueError('ODDR can take either a set or a reset signal.')
 
@@ -67,10 +69,16 @@ def xil_oddr(
                 if clock_enable:
                     data_out.next = data_in_0
 
+                    # We have hard coded the DDR_CLK_EDGE as SAME_EDGE so the
+                    # data_in_0 and data_in_1 are clocked in on the rising
+                    # edge of the clock.
+                    falling_edge_data.next = data_in_1
+
             else:
-                # On falling edges of clock data_in_1 is forwarded
+                # On falling edges of clock, data_in_1 from the last rising of
+                # clock is forwarded.
                 if enabled and clock_enable:
-                    data_out.next = data_in_1
+                    data_out.next = falling_edge_data
 
             if reset:
                 enabled.next = False
@@ -156,10 +164,16 @@ def xil_oddr(
                 if clock_enable:
                     data_out.next = data_in_0
 
+                    # We have hard coded the DDR_CLK_EDGE as SAME_EDGE so the
+                    # data_in_0 and data_in_1 are clocked in on the rising
+                    # edge of the clock.
+                    falling_edge_data.next = data_in_1
+
             else:
-                # On falling edges of clock data_in_1 is forwarded
+                # On falling edges of clock, data_in_1 from the last rising of
+                # clock is forwarded.
                 if enabled and clock_enable:
-                    data_out.next = data_in_1
+                    data_out.next = falling_edge_data
 
             if set_high:
                 enabled.next = False
