@@ -3,6 +3,7 @@ import myhdl
 from collections import OrderedDict
 
 import keyword
+import copy
 
 def _is_valid_name(ident: str) -> bool:
     '''Determine if ident is a valid register or bitfield name.
@@ -361,16 +362,6 @@ class Registers(object):
     ''' A general purpose register definition.
     '''
 
-    @property
-    def register_types(self):
-        return self._register_types
-
-    def __eq__(self, other):
-        return (self._bitfields == other._bitfields and
-                self._register_types == other._register_types and
-                self._register_width == other._register_width)
-
-
     def __init__(
         self, register_list, register_types=None, register_width=32,
         initial_values=None, bitfields=None):
@@ -417,6 +408,7 @@ class Registers(object):
 
         # Create an ordered dictionary
         self._register_types = OrderedDict()
+        self._register_offsets = {}
 
         for each in register_types:
             if each not in register_list:
@@ -426,12 +418,18 @@ class Registers(object):
                     'Invalid register in register_types: %s' % each)
 
         if initial_values is None:
-            initial_values = {}
+            self._initial_values = {}
+
+        else:
+            self._initial_values = copy.copy(initial_values)
 
         if bitfields is None:
-            bitfields = {}
+            self._bitfields = {}
 
-        for initial_val_key in initial_values:
+        else:
+            self._bitfields = copy.copy(bitfields)
+
+        for initial_val_key in self._initial_values:
 
             if (register_types.get(initial_val_key, 'axi_read_write') !=
                 'axi_read_write'):
@@ -441,25 +439,62 @@ class Registers(object):
                     initial_val_key + ': ' +
                     str(register_types[initial_val_key]))
 
-        for name in register_list:
+        for offset, name in enumerate(register_list):
             register_type = register_types.get(name, 'axi_read_write')
 
-            if name in bitfields:
-                initial_vals = initial_values.get(name, None)
-                setattr(
-                    self, name,
-                    Bitfields(register_width, register_type, bitfields[name],
-                              initial_values=initial_vals))
+            if name in self._bitfields:
+                # Create the bitfields
+                initial_vals = self._initial_values.get(name, None)
+                register_bitfields = (
+                    Bitfields(
+                        register_width, register_type, self._bitfields[name],
+                        initial_values=initial_vals))
+                setattr(self, name, register_bitfields)
 
             else:
                 # Create the registers
-                setattr(self, name, Signal(
-                    intbv(initial_values.get(name, 0))[register_width:]))
+                initial_val = self._initial_values.get(name, 0)
+                register_signal = Signal(intbv(initial_val)[register_width:])
+                setattr(self, name, register_signal)
 
             # Populate the ordered dictionary with the appropriate
             # register types, defaulting to 'axi_read_write'
             self._register_types[name] = (
                 register_types.get(name, 'axi_read_write'))
 
-        self._bitfields = bitfields
+            # Keep a record of the offset for each register
+            self._register_offsets[name] = offset
+
+    @property
+    def register_list(self):
+        return list(self._register_types.keys())
+
+    @property
+    def register_types(self):
+        return self._register_types
+
+    @property
+    def initial_values(self):
+        return self._initial_values
+
+    @property
+    def bitfields(self):
+        return self._bitfields
+
+    @property
+    def register_width(self):
+        return self._register_width
+
+    def register_offset(self, register_name):
+        if register_name not in self._register_offsets:
+            raise ValueError(
+                'Registers.register_offset: Invalid register_name')
+
+        return self._register_offsets[register_name]
+
+    def __eq__(self, other):
+        return (self._bitfields == other._bitfields and
+                self._register_types == other._register_types and
+                self._register_width == other._register_width)
+
 

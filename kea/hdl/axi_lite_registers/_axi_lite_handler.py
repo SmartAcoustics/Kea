@@ -1,93 +1,109 @@
-from kea.hdl.axi import AxiLiteInterface, axi_lite
-from ._registers import Registers, Bitfields
-from myhdl import *
 from math import log, ceil
+from myhdl import block, Signal, intbv, always, enum, modbv
 
-@block
-def ro_register_assignments(register, read_signal):
-    @always_comb
-    def assign():
-        read_signal.next = register
+from kea.hdl.axi import AxiLiteInterface, axi_lite
+from kea.hdl.signal_handling.asynchronous import (
+    signal_assigner, signal_slicer)
 
-    return assign
+from ._registers import Registers, Bitfields
 
-@block
-def rw_register_assignments(register, read_signal, write_signal):
-
-    @always_comb
-    def assign():
-        read_signal.next = write_signal
-        register.next = write_signal
-
-    return assign
-
-@block
-def wo_register_assignments(
-    clock, register, read_signal, write_signal, do_write):
-
-    zero_register = Signal(intbv(0, read_signal.min, read_signal.max))
-
-    @always_comb
-    def assign():
-        if do_write:
-            register.next = write_signal
-        else:
-            register.next = 0
-
-    @always_comb
-    def assign_zero_read():
-        read_signal.next = zero_register
-
-    @always(clock.posedge)
-    def assign_zero_register():
-        zero_register.next = 0
-
-    return assign, assign_zero_read, assign_zero_register
+VALID_DATA_BITWIDTHS = (32, 64)
 
 @block
 def axi_lite_handler(
-    clock, axil_nreset, axi_lite_interface, registers):
+    clock, axil_nreset, axi_lite_interface, registers, last_written_reg_addr,
+    last_written_reg_data, write_count):
 
     if not isinstance(axi_lite_interface, AxiLiteInterface):
         raise ValueError(
-            'axi_lite_interface needs to be an instance of AxiLiteInterface')
+            'axi_lite_handler: axi_lite_interface needs to be an instance of '
+            'AxiLiteInterface')
 
     if not isinstance(registers, Registers):
-        raise ValueError('registers need to be an instance of Registers')
+        raise ValueError(
+            'axi_lite_handler: registers need to be an instance of Registers')
 
     if (len(axi_lite_interface.WDATA) != len(axi_lite_interface.RDATA)):
-        raise ValueError('Read and write data should be of equal width')
+        raise ValueError(
+            'axi_lite_handler: Read and write data should be of equal width')
+
+    data_bitwidth = len(axi_lite_interface.WDATA)
 
     if (len(axi_lite_interface.AWADDR) != len(axi_lite_interface.ARADDR)):
-        raise ValueError('Read and write addresses should be of equal width')
+        raise ValueError(
+            'axi_lite_handler: Read and write addresses should be of equal '
+            'width')
 
-    if len(axi_lite_interface.WDATA) not in (32, 64):
-        raise ValueError('Data width must be 32 or 64 bits')
+    addr_bitwidth = len(axi_lite_interface.AWADDR)
 
-    # Need to remap the address from words to bytes to work with the
-    # software on the PS
-    addr_remap_ratio = len(axi_lite_interface.WDATA)//8
+    for n in VALID_DATA_BITWIDTHS:
+        # Sanity check to make sure all valid data bitwidths are a power of 2,
+        # are a multiple of 8 and are greater than 8.
+        assert((n & (n-1) == 0) and (n % 8 == 0) and (n > 8))
 
-    # The number of bits that should be taken off the address to account for
-    # the byte addressing.
-    byte_to_word_shift = int(log(addr_remap_ratio, 2))
+    if data_bitwidth not in VALID_DATA_BITWIDTHS:
+        raise ValueError('axi_lite_handler: Data width must be 32 or 64 bits')
 
-    if (len(registers.register_types) > 2**(
-        len(axi_lite_interface.AWADDR)-byte_to_word_shift)):
-        raise ValueError('n_registers too large for the address width')
+    if hasattr(axi_lite_interface, 'AWPROT'):
+        raise TypeError(
+            'axi_lite_handler: The axi_lite_interface includes AWPROT but '
+            'the axi_lite_handler does not support AWPROT')
 
-    # This gives us the required number of bits to address all of the
-    # registers.
-    required_addr_width = (
-        int(ceil(log(len(registers.register_types), 2))) + byte_to_word_shift)
+    if hasattr(axi_lite_interface, 'ARPROT'):
+        raise TypeError(
+            'axi_lite_handler: The axi_lite_interface includes ARPROT but '
+            'the axi_lite_handler does not support ARPROT')
 
-    # Create lists of registers
-    write_signals = []
-    read_signals = []
-    assignment_blocks = []
-    do_write_signals = []
+    if hasattr(axi_lite_interface, 'WSTRB'):
+        raise TypeError(
+            'axi_lite_handler: The axi_lite_interface includes WSTRB but '
+            'the axi_lite_handler does not support WSTRB')
+
+    if registers.register_width != data_bitwidth:
+        raise TypeError(
+            'axi_lite_handler: The axi_lite_interface data width should be '
+            'the same as the register bitwidth')
+
+    if len(last_written_reg_data) != data_bitwidth:
+        raise TypeError(
+            'axi_lite_handler: the bitwidth of last_written_reg_data should '
+            'be equal to the bitwidths of the data signals on the '
+            'axi_lite_interface')
+
+    if len(last_written_reg_addr) != addr_bitwidth:
+        raise TypeError(
+            'axi_lite_handler: the bitwidth of last_written_reg_addr should '
+            'be equal to the bitwidths of the address signals on the '
+            'axi_lite_interface')
+
+    if write_count.val != 0:
+        raise ValueError(
+            'axi_lite_handler: The write_count should initialise with 0')
+
+    return_objects = []
+
+    # This block addresses in words and the AXI addresses are in bytes so we
+    # need to remap the AXIS address from bytes to words. Calculate the number
+    # of bits that address the bytes and the number of bits which address the
+    # word.
+    byte_addr_bitwidth = int(log(data_bitwidth//8, 2))
+    word_addr_bitwidth = addr_bitwidth - byte_addr_bitwidth
 
     n_registers = len(registers.register_types)
+
+    if n_registers > 2**word_addr_bitwidth:
+        raise ValueError(
+            'axi_lite_handler: n_registers too large for the address width')
+
+    # Connect up the bitfields
+    for reg_name in registers.bitfields:
+        bitfields = getattr(registers, reg_name)
+        return_objects.append(bitfields.bitfield_connector())
+
+    # Create lists of registers
+    write_signals = [None for n in range(n_registers)]
+    read_signals = [None for n in range(n_registers)]
+    wo_registers = [None for n in range(n_registers)]
 
     for name in registers.register_types:
 
@@ -99,338 +115,307 @@ def axi_lite_handler(
             interface_register = interface_object
 
         reg_initial_val = interface_register.val
+        reg_offset = registers.register_offset(name)
         reg_type = registers.register_types[name]
 
-        write_signal = Signal(
-            intbv(reg_initial_val)[len(interface_register):])
-        read_signal = Signal(
-            intbv(reg_initial_val)[len(interface_register):])
-        do_write = Signal(False)
+        write_signal = Signal(intbv(reg_initial_val)[data_bitwidth:])
+        read_signal = Signal(intbv(reg_initial_val)[data_bitwidth:])
 
-        write_signals.append(write_signal)
-        read_signals.append(read_signal)
-        do_write_signals.append(do_write)
+        write_signals[reg_offset] = write_signal
+        read_signals[reg_offset] = read_signal
 
         if reg_type == 'axi_read_write':
-            # For read write registers create the correct type of register.
-            assignment_blocks.append(
-                rw_register_assignments(
-                    interface_register, read_signal, write_signal))
+            # The register should be written by this block in response to AXI
+            # write transactions.
+            return_objects.append(
+                signal_assigner(write_signal, interface_register))
+
+            # The register should be read by this block in response to AXI
+            # read transactions. The read signal should track the write
+            # signal.
+            return_objects.append(signal_assigner(write_signal, read_signal))
+
+            # I tried multiple techniques to record which registers are write
+            # only (using a ROM, Signal(False) etc). This specific combination
+            # of a list of 1 bit intbv signals was the only one that worked
+            # when converted to VHDL and Verilog.
+            wo_registers[reg_offset] = Signal(intbv(0)[1:])
+            wo_registers[reg_offset].driven = 'reg'
 
         elif reg_type == 'axi_read_only':
-            # For read only registers create the correct type of register.
-            assignment_blocks.append(
-                ro_register_assignments(interface_register, read_signal))
+            # The write signal should be ignored
+            write_signal.read = True
+
+            # The register should be read by this block in response to AXI
+            # read transactions. The read signal should track the register.
+            return_objects.append(
+                signal_assigner(interface_register, read_signal))
+
+            # I tried multiple techniques to record which registers are write
+            # only (using a ROM, Signal(False) etc). This specific combination
+            # of a list of 1 bit intbv signals was the only one that worked
+            # when converted to VHDL and Verilog.
+            wo_registers[reg_offset] = Signal(intbv(0)[1:])
+            wo_registers[reg_offset].driven = 'reg'
 
         elif reg_type == 'axi_write_only':
-            # For write only registers create the correct type of register.
-            assignment_blocks.append(
-                wo_register_assignments(
-                    clock, interface_register, read_signal, write_signal, do_write))
+            # The register should be written by this block in response to AXI
+            # write transactions.
+            return_objects.append(
+                signal_assigner(write_signal, interface_register))
+
+            # The read signal should not be used. Set driven to `reg` to
+            # supress the Myhdl conversion warning that the signal is not
+            # driven
+            read_signal.driven = 'reg'
+
+            # I tried multiple techniques to record which registers are write
+            # only (using a ROM, Signal(False) etc). This specific combination
+            # of a list of 1 bit intbv signals was the only one that worked
+            # when converted to VHDL and Verilog.
+            wo_registers[reg_offset] = Signal(intbv(1)[1:])
+            wo_registers[reg_offset].driven = 'reg'
 
         else:
             raise ValueError(
-                'Unknown register type: \'%s\' is not defined.' % reg_type)
+                'axi_lite_handler: Unknown register type: \'%s\' is not '
+                'defined.' % reg_type)
 
-    t_write_state = enum(
-        'IDLE', 'READY', 'ADDR_RECEIVED', 'DATA_RECEIVED', 'RESPOND')
-    write_state = Signal(t_write_state.IDLE)
+    # Check that all the register signals have been set correctly
+    assert(None not in write_signals)
+    assert(None not in read_signals)
+    assert(None not in wo_registers)
 
-    t_read_state = enum('IDLE', 'READY', 'RESPOND')
-    read_state = Signal(t_read_state.IDLE)
+    pending_write_count = Signal(modbv(1)[len(write_count):])
 
     # Create the address and data buffers
-    write_address_buffer = Signal(intbv(0)[len(axi_lite_interface.AWADDR):])
-    write_data_buffer = Signal(intbv(0)[len(axi_lite_interface.WDATA):])
+    wr_addr_buffer = Signal(intbv(0)[addr_bitwidth:])
+    wr_data_buffer = Signal(intbv(0)[data_bitwidth:])
 
-    valid_write_address = Signal(False)
-    valid_read_address = Signal(False)
+    # Extract the byte address from the AWADDR signal
+    wr_byte_addr = Signal(intbv(0)[byte_addr_bitwidth:])
+    return_objects.append(
+        signal_slicer(
+            axi_lite_interface.AWADDR, 0, byte_addr_bitwidth,
+            wr_byte_addr))
 
-    valid_write_address_buffer = Signal(False)
+    # Extract the word address from the AWADDR signal
+    wr_word_addr = Signal(intbv(0)[word_addr_bitwidth:])
+    return_objects.append(
+        signal_slicer(
+            axi_lite_interface.AWADDR, byte_addr_bitwidth, word_addr_bitwidth,
+            wr_word_addr))
 
-    # Create the internal remapped address signals
-    if required_addr_width==byte_to_word_shift:
-        # There is only one register.
-        word_write_address = Signal(intbv(0)[1:])
-        word_read_address = Signal(intbv(0)[1:])
-    else:
-        word_write_address = (
-            Signal(intbv(0)[required_addr_width-byte_to_word_shift:]))
-        word_read_address = (
-            Signal(intbv(0)[required_addr_width-byte_to_word_shift:]))
+    # Extract the byte address from the wr_addr_buffer
+    wr_byte_addr_buffer = Signal(intbv(0)[byte_addr_bitwidth:])
+    return_objects.append(
+        signal_slicer(
+            wr_addr_buffer, 0, byte_addr_bitwidth, wr_byte_addr_buffer))
 
-    if required_addr_width==byte_to_word_shift:
-        @always_comb
-        def address_remap():
-            '''
-            Need to remap the address signals to remove the byte indexing which
-            comes from software.
+    # Extract the word address from the wr_addr_buffer
+    wr_word_addr_buffer = Signal(intbv(0)[word_addr_bitwidth:])
+    return_objects.append(
+        signal_slicer(
+            wr_addr_buffer, byte_addr_bitwidth, word_addr_bitwidth,
+            wr_word_addr_buffer))
 
-            We also at this point check that the address is valid, deasserting
-            valid_read_address or valid_write_address flag as necessary.
-            '''
+    # Extract the byte address from the ARADDR signal
+    rd_byte_addr = Signal(intbv(0)[byte_addr_bitwidth:])
+    return_objects.append(
+        signal_slicer(
+            axi_lite_interface.ARADDR, 0, byte_addr_bitwidth,
+            rd_byte_addr))
 
-            # There is only one register so address should always be zero.
-            word_write_address.next = 0
-            word_read_address.next = 0
+    # Extract the word address from the ARADDR signal
+    rd_word_addr = Signal(intbv(0)[word_addr_bitwidth:])
+    return_objects.append(
+        signal_slicer(
+            axi_lite_interface.ARADDR, byte_addr_bitwidth, word_addr_bitwidth,
+            rd_word_addr))
 
-            # Only write to the register if the address is zero
-            if axi_lite_interface.AWADDR == 0:
-                valid_write_address.next = True
-            else:
-                valid_write_address.next = False
-
-            # Only read from the register if the address is zero
-            if axi_lite_interface.ARADDR == 0:
-                valid_read_address.next = True
-            else:
-                valid_read_address.next = False
-
-    else:
-        @always_comb
-        def address_remap():
-            '''
-            Need to remap the address signals to remove the byte indexing
-            which comes from software.
-
-            We also at this point check that the address is valid, deasserting
-            valid_read_address or valid_write_address flag as necessary.
-            '''
-
-            if axi_lite_interface.AWADDR[
-                required_addr_width:byte_to_word_shift] < n_registers:
-
-                word_write_address.next = (
-                    axi_lite_interface.AWADDR[
-                        required_addr_width:byte_to_word_shift])
-
-                valid_write_address.next = True
-
-            else:
-                word_write_address.next = 0
-                valid_write_address.next = False
-
-            if axi_lite_interface.ARADDR[
-                required_addr_width:byte_to_word_shift] < n_registers:
-
-                word_read_address.next = (
-                    axi_lite_interface.ARADDR[
-                        required_addr_width:byte_to_word_shift])
-
-                valid_read_address.next = True
-
-            else:
-                word_read_address.next = 0
-                valid_read_address.next = False
+    t_wr_state = enum(
+        'IDLE', 'READY', 'ADDR_RECEIVED', 'DATA_RECEIVED', 'RESPOND')
+    wr_state = Signal(t_wr_state.IDLE)
 
     @always(clock.posedge)
     def write():
+
+        for n in range(n_registers):
+            if wo_registers[n]:
+                # Iterate over all write signals and if they are write only
+                # set them low. The write only registers should pulse for one
+                # cycle.
+                write_signals[n].next = 0
+
+        if wr_state == t_wr_state.IDLE:
+            # Ready to receive so set the ready signals.
+            axi_lite_interface.AWREADY.next = True
+            axi_lite_interface.WREADY.next = True
+            wr_state.next = t_wr_state.READY
+
+        elif wr_state == t_wr_state.READY:
+
+            if (axi_lite_interface.AWVALID and
+                axi_lite_interface.WVALID):
+                # Received address and data from the master.
+                axi_lite_interface.AWREADY.next = False
+                axi_lite_interface.WREADY.next = False
+
+                if wr_byte_addr == 0 and wr_word_addr < n_registers:
+                    # Check that the address is word aligned and specifies a
+                    # register. If so, store the received data in the received
+                    # address.
+                    write_signals[wr_word_addr].next = (
+                        axi_lite_interface.WDATA)
+
+                    # Increment the write_count
+                    write_count.next = pending_write_count
+                    pending_write_count.next = pending_write_count + 1
+
+                    # Update the last written address and data signals
+                    last_written_reg_addr.next = axi_lite_interface.AWADDR
+                    last_written_reg_data.next = axi_lite_interface.WDATA
+
+                    axi_lite_interface.BRESP.next = axi_lite.OKAY
+
+                else:
+                    # Otherwise respond with an error
+                    axi_lite_interface.BRESP.next = axi_lite.SLVERR
+
+                # Setup the response transaction.
+                axi_lite_interface.BVALID.next = True
+
+                wr_state.next = t_wr_state.RESPOND
+
+            elif axi_lite_interface.AWVALID:
+                # Received address from the master
+                axi_lite_interface.AWREADY.next = False
+                wr_addr_buffer.next = axi_lite_interface.AWADDR
+                wr_state.next = t_wr_state.ADDR_RECEIVED
+
+            elif axi_lite_interface.WVALID:
+                # Received data from the master.
+                axi_lite_interface.WREADY.next = False
+                wr_data_buffer.next = axi_lite_interface.WDATA
+                wr_state.next = t_wr_state.DATA_RECEIVED
+
+        elif wr_state == t_wr_state.ADDR_RECEIVED:
+            if axi_lite_interface.WVALID:
+                # Received data from the master.
+                axi_lite_interface.WREADY.next = False
+
+                if (wr_byte_addr_buffer == 0 and
+                    wr_word_addr_buffer < n_registers):
+                    # Store the received data in the buffered address.
+                    write_signals[wr_word_addr_buffer].next = (
+                        axi_lite_interface.WDATA)
+
+                    # Increment the write_count
+                    write_count.next = pending_write_count
+                    pending_write_count.next = pending_write_count + 1
+
+                    # Update the last written address and data signals
+                    last_written_reg_addr.next = wr_addr_buffer
+                    last_written_reg_data.next = axi_lite_interface.WDATA
+
+                    axi_lite_interface.BRESP.next = axi_lite.OKAY
+
+                else:
+                    # Otherwise the address is invalid
+                    axi_lite_interface.BRESP.next = axi_lite.SLVERR
+
+                # Set up the response transaction.
+                axi_lite_interface.BVALID.next = True
+                wr_state.next = t_wr_state.RESPOND
+
+        elif wr_state == t_wr_state.DATA_RECEIVED:
+            if axi_lite_interface.AWVALID:
+                # Received address from the master.
+                axi_lite_interface.AWREADY.next = False
+
+                if wr_byte_addr == 0 and wr_word_addr < n_registers:
+                    # Check that the address is word aligned and specifies a
+                    # register. Is so, store the received data in the received
+                    # address.
+                    write_signals[wr_word_addr].next = wr_data_buffer
+
+                    # Increment the write_count
+                    write_count.next = pending_write_count
+                    pending_write_count.next = pending_write_count + 1
+
+                    # Update the last written address and data signals
+                    last_written_reg_addr.next = axi_lite_interface.AWADDR
+                    last_written_reg_data.next = wr_data_buffer
+
+                    axi_lite_interface.BRESP.next = axi_lite.OKAY
+
+                else:
+                    # Otherwise the address is invalid
+                    axi_lite_interface.BRESP.next = axi_lite.SLVERR
+
+                # Set up the response transaction.
+                axi_lite_interface.BVALID.next = True
+
+                wr_state.next = t_wr_state.RESPOND
+
+        elif wr_state == t_wr_state.RESPOND:
+            if axi_lite_interface.BREADY:
+                # Response has been received so set the valid signal low
+                # again.
+                axi_lite_interface.BVALID.next = False
+                wr_state.next = t_wr_state.IDLE
 
         if not axil_nreset:
             # Reset so drive control signals low and return to idle.
             axi_lite_interface.AWREADY.next = False
             axi_lite_interface.WREADY.next = False
             axi_lite_interface.BVALID.next = False
-            write_state.next = t_write_state.IDLE
+            wr_state.next = t_wr_state.IDLE
 
-        else:
-            if write_state == t_write_state.IDLE:
-                # Ready to receive so set the ready signals.
-                axi_lite_interface.AWREADY.next = True
-                axi_lite_interface.WREADY.next = True
-                write_state.next = t_write_state.READY
+    return_objects.append(write)
 
-            elif write_state == t_write_state.READY:
-
-                if (axi_lite_interface.AWVALID and
-                    axi_lite_interface.WVALID):
-                    # Received address and data from the master.
-                    axi_lite_interface.AWREADY.next = False
-                    axi_lite_interface.WREADY.next = False
-
-                    if valid_write_address:
-                        # Store the received data in the received address.
-                        write_signals[word_write_address].next = (
-                            axi_lite_interface.WDATA)
-
-                        axi_lite_interface.BRESP.next = axi_lite.OKAY
-
-                    else:
-                        # We must respond with an error
-                        axi_lite_interface.BRESP.next = axi_lite.SLVERR
-
-                    # Setup the response transaction.
-                    axi_lite_interface.BVALID.next = True
-
-                    # We need to buffer the write address in order to update
-                    # do_write properly
-                    write_address_buffer.next = word_write_address
-
-                    valid_write_address_buffer.next = (
-                        valid_write_address)
-
-                    write_state.next = t_write_state.RESPOND
-
-                elif axi_lite_interface.AWVALID:
-                    # Received address from the master.
-                    axi_lite_interface.AWREADY.next = False
-                    # Store the address in a buffer.
-                    write_address_buffer.next = word_write_address
-                    valid_write_address_buffer.next = (
-                        valid_write_address)
-
-                    write_state.next = t_write_state.ADDR_RECEIVED
-
-                elif axi_lite_interface.WVALID:
-                    # Received data from the master.
-                    axi_lite_interface.WREADY.next = False
-                    # Store the data in a buffer.
-                    write_data_buffer.next = axi_lite_interface.WDATA
-                    write_state.next = t_write_state.DATA_RECEIVED
-
-            elif write_state == t_write_state.ADDR_RECEIVED:
-                if axi_lite_interface.WVALID:
-                    # Received data from the master.
-                    axi_lite_interface.WREADY.next = False
-
-                    if valid_write_address_buffer:
-                        # Store the received data in the buffered address.
-                        write_signals[write_address_buffer].next = (
-                            axi_lite_interface.WDATA)
-
-                        axi_lite_interface.BRESP.next = axi_lite.OKAY
-
-                    else:
-                        axi_lite_interface.BRESP.next = axi_lite.SLVERR
-
-                    # Set up the response transaction.
-                    axi_lite_interface.BVALID.next = True
-                    write_state.next = t_write_state.RESPOND
-
-            elif write_state == t_write_state.DATA_RECEIVED:
-                if axi_lite_interface.AWVALID:
-                    # Received address from the master.
-                    axi_lite_interface.AWREADY.next = False
-
-                    if valid_write_address:
-                        # Store the received data in the received address.
-                        write_signals[word_write_address].next = (
-                            write_data_buffer)
-
-                        axi_lite_interface.BRESP.next = axi_lite.OKAY
-
-                    else:
-                        # We must respond with an error
-                        axi_lite_interface.BRESP.next = axi_lite.SLVERR
-
-                    # Set up the response transaction.
-                    axi_lite_interface.BVALID.next = True
-
-                    # Store the address in a buffer for do_write
-                    write_address_buffer.next = word_write_address
-
-                    write_state.next = t_write_state.RESPOND
-
-            elif write_state == t_write_state.RESPOND:
-                if axi_lite_interface.BREADY:
-                    # Response has been received so set the valid signal low
-                    # again.
-                    axi_lite_interface.BVALID.next = False
-                    write_state.next = t_write_state.IDLE
+    t_rd_state = enum('IDLE', 'READY', 'RESPOND')
+    rd_state = Signal(t_rd_state.IDLE)
 
     @always(clock.posedge)
     def read():
+
+        if rd_state == t_rd_state.IDLE:
+            # Ready to receive so set the ready signal.
+            axi_lite_interface.ARREADY.next = True
+            rd_state.next = t_rd_state.READY
+
+        elif rd_state == t_rd_state.READY:
+            if axi_lite_interface.ARVALID:
+                # Received the read address so respond with the data.
+                axi_lite_interface.ARREADY.next = False
+                axi_lite_interface.RVALID.next = True
+
+                if rd_byte_addr == 0 and rd_word_addr < n_registers:
+                    # Check that the address is word aligned and specifies a
+                    # register. Is so, store the received data in the received
+                    # address.
+                    axi_lite_interface.RDATA.next = read_signals[rd_word_addr]
+                    axi_lite_interface.RRESP.next = axi_lite.OKAY
+
+                else:
+                    axi_lite_interface.RDATA.next = 0
+                    axi_lite_interface.RRESP.next = axi_lite.SLVERR
+
+                rd_state.next = t_rd_state.RESPOND
+
+        elif rd_state == t_rd_state.RESPOND:
+            if axi_lite_interface.RREADY:
+                # Response has been received.
+                axi_lite_interface.RVALID.next = False
+                rd_state.next = t_rd_state.IDLE
 
         if not axil_nreset:
             # Axi nreset so drive control signals low and return to idle.
             axi_lite_interface.ARREADY.next = False
             axi_lite_interface.RVALID.next = False
-            read_state.next = t_read_state.IDLE
+            rd_state.next = t_rd_state.IDLE
 
-        else:
-            if read_state == t_read_state.IDLE:
-                # Ready to receive so set the ready signal.
-                axi_lite_interface.ARREADY.next = True
-                read_state.next = t_read_state.READY
+    return_objects.append(read)
 
-            elif read_state == t_read_state.READY:
-                if axi_lite_interface.ARVALID:
-                    # Received the read address so respond with the data.
-                    axi_lite_interface.ARREADY.next = False
-                    axi_lite_interface.RVALID.next = True
-
-                    if valid_read_address:
-                        axi_lite_interface.RDATA.next = (
-                            read_signals[word_read_address])
-                        axi_lite_interface.RRESP.next = axi_lite.OKAY
-
-                    else:
-                        axi_lite_interface.RDATA.next = 0
-                        axi_lite_interface.RRESP.next = axi_lite.SLVERR
-
-                    read_state.next = t_read_state.RESPOND
-
-            elif read_state == t_read_state.RESPOND:
-                if axi_lite_interface.RREADY:
-                    # Response has been received.
-                    axi_lite_interface.RVALID.next = False
-                    read_state.next = t_read_state.IDLE
-
-    n_do_writes = len(do_write_signals)
-
-    if n_do_writes > 0:
-        # Ideally this should be combined into the main state machine, but
-        # this way we can optionally disable the block if we don't need it.
-        #
-        @always(clock.posedge)
-        def assign_do_writes():
-            '''Sets the do_write flag if and only if a write transaction
-            happens.
-            '''
-
-            if not axil_nreset:
-                for n in range(n_do_writes):
-                    do_write_signals[n].next = False
-            else:
-                if write_state == t_write_state.READY:
-                    if (axi_lite_interface.AWVALID and
-                        axi_lite_interface.WVALID):
-
-                        if valid_write_address:
-                            do_write_signals[word_write_address].next = True
-
-                    else:
-                        pass
-
-                elif write_state == t_write_state.ADDR_RECEIVED:
-                    if axi_lite_interface.WVALID:
-                        if valid_write_address_buffer:
-                            do_write_signals[write_address_buffer].next = True
-
-
-                elif write_state == t_write_state.DATA_RECEIVED:
-                    if axi_lite_interface.AWVALID:
-                        if valid_write_address:
-                            do_write_signals[word_write_address].next = True
-
-                    else:
-                        pass
-
-                elif write_state == t_write_state.RESPOND:
-                    do_write_signals[write_address_buffer].next = False
-
-                else:
-                    # defensive catch
-                    do_write_signals[write_address_buffer].next = False
-
-    else:
-        assign_do_writes = []
-
-    # Connect up the bitfields
-    bitfield_connections = []
-    for bitfield in registers._bitfields:
-        bitfield_connections.append(
-            getattr(registers, bitfield).bitfield_connector())
-
-    return (read, write, assignment_blocks, address_remap, assign_do_writes,
-            bitfield_connections)
+    return return_objects

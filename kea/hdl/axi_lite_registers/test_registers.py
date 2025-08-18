@@ -846,7 +846,6 @@ class TestRegisterInterfaceSimulation(KeaTestCase):
                 ''.join(random.choice(string.ascii_lowercase)
                         for i in range(5)))
 
-
         # Create a register_types dict which uses a random number of the names
         # in the list of registers as keys.
         register_types = {key: random.choice(
@@ -917,6 +916,203 @@ class TestRegisterInterfaceSimulation(KeaTestCase):
         for name in register_list:
             assert(registers.register_types[name]=='axi_read_write')
 
+    def test_register_list_property(self):
+        ''' The `register_list` property on the `Registers` class should
+        return the `register_list` that was passed to `Registers` when it was
+        created.
+        '''
+
+        n_registers = random.randrange(1, 40)
+        register_list = []
+
+        # Create a list of registers with random names of 5 character length.
+        for i in range(n_registers):
+            register_list.append(
+                ''.join(random.choice(string.ascii_lowercase)
+                        for i in range(5)))
+
+        # Create the registers without passing a dict of register types
+        registers = Registers(register_list)
+
+        assert(registers.register_list==register_list)
+
+    def test_initial_values_property(self):
+        ''' The `initial_values` property on the `Registers` class should
+        return the `initial_values` dict that was passed to `Registers` when
+        it was created.
+
+        If `initial_values` was not included in the arguments passed to
+        `Registers` when it was created then the `initial_values` property
+        should return an empty dict.
+
+        If the `initial_values` argument was set to `None` when the
+        `Registers` class was created then the `initial_values` property
+        should return an empty dict.
+        '''
+
+        n_registers = 30
+        register_list = []
+
+        # Create a list of registers with random names of 5 character length.
+        for i in range(n_registers):
+            register_list.append(
+                ''.join(random.choice(string.ascii_lowercase)
+                        for i in range(5)))
+
+        # Create a register_types dict which uses a random number of the names
+        # in the list of registers as keys.
+        register_types = {key: random.choice(
+            self.available_register_types) for key in register_list if (
+                random.random() < 0.5)}
+
+        rw_registers = []
+        non_rw_registers = []
+
+        for key in register_list:
+            if key in register_types:
+                if register_types[key] == 'axi_read_write':
+                    rw_registers.append(key)
+                else:
+                    non_rw_registers.append(key)
+
+            else:
+                # Also read-write
+                rw_registers.append(key)
+
+        initial_values = {
+            key: random.randrange(0xFFFFFFFF) for key in rw_registers if (
+                random.random() < 0.5)}
+
+        registers = (
+            Registers(
+                register_list, register_types, initial_values=initial_values))
+
+        assert(registers.initial_values==initial_values)
+
+        # Create the registers with initial_values set to None
+        registers = (
+            Registers(register_list, register_types, initial_values=None))
+
+        assert(registers.initial_values=={})
+
+        # Create the registers without initial_values set
+        registers = Registers(register_list, register_types)
+
+        assert(registers.initial_values=={})
+
+    def test_register_offset(self):
+        ''' The `register_offset` method on the `Registers` class should
+        return the offset of the `register_name` in the `register_list` that
+        was passed to `Registers` when it was created.
+
+        If `register_name` was not included in the `register_list` then the
+        `register_offset` method should raise an error.
+        '''
+        n_registers = random.randrange(1, 100)
+        register_list = []
+
+        # Create a list of registers with random names of 5 character length.
+        for i in range(n_registers):
+            register_list.append(
+                ''.join(random.choice(string.ascii_lowercase)
+                        for i in range(5)))
+
+        # Create the registers without passing a dict of register types
+        registers = Registers(register_list)
+
+        # The register_offset method should return the offset of the register
+        # in the original register_list
+        for expected_offset, name in enumerate(register_list):
+            assert(registers.register_offset(name)==expected_offset)
+
+        invalid_register_name = (
+            ''.join(random.choice(string.ascii_lowercase) for i in range(8)))
+
+        def register_offset_wrapper(register_name):
+            registers.register_offset(register_name)
+
+        self.assertRaisesRegex(
+            ValueError,
+            ('Registers.register_offset: Invalid register_name'),
+            register_offset_wrapper,
+            invalid_register_name,)
+
+    def test_bitfields_property(self):
+        ''' The `bitfields` property on the `Registers` class should return
+        the `bitfields` dict that was passed to `Registers` when it was
+        created.
+
+        If `bitfields` was not included in the arguments passed to `Registers`
+        when it was created then the `bitfields` property should return an
+        empty dict.
+
+        If the `bitfields` argument was set to `None` when the `Registers`
+        class was created then the `bitfields` property should return an empty
+        dict.
+        '''
+        n_registers = random.randrange(1, 100)
+        register_bitwidth = 32
+        register_list = []
+
+        # Create a list of registers with random names of 5 character length.
+        for i in range(n_registers):
+            register_list.append(
+                ''.join(random.choice(string.ascii_lowercase)
+                        for i in range(5)))
+
+        n_registers_with_bitfields = random.randrange(1, n_registers+1)
+        registers_with_bitfields = (
+            random.sample(register_list, n_registers_with_bitfields))
+
+        bitfields = {}
+
+        for register in registers_with_bitfields:
+            bitfields[register], _ordered_bitfields = (
+                create_bitfields_config(register_bitwidth))
+
+        # Create the registers with bitfields
+        registers = Registers(register_list, bitfields=bitfields)
+
+        assert(registers.bitfields==bitfields)
+
+        # Create the registers with bitfields set to None
+        registers = Registers(register_list, bitfields=None)
+
+        assert(registers.bitfields=={})
+
+        # Create the registers without bitfields set
+        registers = Registers(register_list)
+
+        assert(registers.bitfields=={})
+
+    def test_register_width(self):
+        ''' The `register_width` property on the `Registers` class should
+        return the `register_width` that was passed to `Registers` when it was
+        created.
+
+        If `register_width` was not included in the arguments passed to
+        `Registers` when it was created then it should have defaulted to 32
+        and the `register_width` property should return this.
+        '''
+        n_registers = random.randrange(1, 100)
+        register_bitwidth = random.randrange(1, 65)
+        register_list = []
+
+        # Create a list of registers with random names of 5 character length.
+        for i in range(n_registers):
+            register_list.append(
+                ''.join(random.choice(string.ascii_lowercase)
+                        for i in range(5)))
+
+        # Create the registers with bitfields
+        registers = Registers(register_list, register_width=register_bitwidth)
+
+        assert(registers.register_width==register_bitwidth)
+
+        # Create the registers with bitfields set to None
+        registers = Registers(register_list)
+
+        assert(registers.register_width==32)
 
     def test_bitfields(self):
         '''If a bitfields argument is supplied, this should be used to
