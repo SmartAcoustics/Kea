@@ -398,7 +398,7 @@ class TestAxiLiteHandlerInterface(KeaTestCase):
 
         data_bitwidth = (
             random.choice([
-                n for n in range(33)
+                n for n in range(1, 33)
                 if n not in AXI_LITE_HANDLER_VALID_DATA_BITWIDTHS]))
 
         # Set up the axi lite interface with an invalid data bitwidth

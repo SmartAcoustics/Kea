@@ -118,6 +118,10 @@ class TestNBitTriStateBuffers(KeaTestCase):
 
         return_objects = []
 
+        # NOTE: These tests raise a BusContentionWarning because the tri
+        # state signal on the tri_state_io_interface is has multiple drivers.
+        # a tri state signal is expected to have multiple drivers so we can
+        # ignore this warning.
         tri_state_io_interface = NBitsTriStateBuffersIOInterface(n_bits)
 
         # Invert tri_state_control for one of the n_bit_tri_state_buffers

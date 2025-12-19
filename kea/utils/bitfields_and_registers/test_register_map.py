@@ -227,7 +227,7 @@ class RegisterMapSimulationMixIn(object):
         if n_addresses_per_register == 1:
             # If n_addresses_per_register is 1 then all offsets are valid so
             # we cannot run this test.
-            return True
+            return None
 
         # Pick a random register
         register = random.choice(

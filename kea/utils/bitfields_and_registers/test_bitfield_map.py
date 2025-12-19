@@ -458,7 +458,7 @@ class BitfieldMapSimulationMixIn(object):
         if len(self.bitfield_map.constant_bitfield_names) <= 0:
             # There are no constants in the bitfield map so we can't run this
             # test
-            return True
+            return None
 
         invalid_name = (
             random.choice(self.bitfield_map.constant_bitfield_names))

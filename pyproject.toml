@@ -1,15 +1,16 @@
 [project]
 name = "Kea"
-version = "0.8.0"
+version = "0.9.0"
 description = "A collection of useful MyHdl blocks."
 authors = [
     {name = "Toby", email = "toby.gomersall@smartacoustics.co.uk"},
 ]
 dependencies = [
-    "myhdl @ git+https://github.com/myhdl/myhdl.git@ae25af4d593d20a26c85fbb17c0cd98a026e8595",
     "numpy~=1.26",
+    "setuptools>=80.9.0",
+    "myhdl @ git+https://github.com/myhdl/myhdl.git@7dc29c242cd33cb835c336a81ffc3a461eaa92f4",
 ]
-requires-python = "~=3.10.12"
+requires-python = "~=3.12.3"
 readme = "README.md"
 license = {text = "BSD-3-Clause"}
 
