@@ -497,7 +497,7 @@ class SimulationOutputs(MutableMapping):
         self._lookups = {}
         self._user_keys = set()
         self._list_checker = re.compile(
-            '\A([a-zA-Z_][a-zA-Z0-9_]*)\[(\d+)\]\Z')
+            r'\A([a-zA-Z_][a-zA-Z0-9_]*)\[(\d+)\]\Z')
 
         if init_dict is not None:
             for each_key in init_dict:
