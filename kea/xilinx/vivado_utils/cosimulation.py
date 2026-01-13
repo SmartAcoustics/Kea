@@ -34,7 +34,6 @@ __all__ = ['vivado_vhdl_cosimulation', 'vivado_verilog_cosimulation',
            'VivadoError']
 
 _simulate_tcl_template = string.Template('''
-config_webtalk -user off
 create_project $project_name $project_path -part $part
 
 set_property target_language $target_language [current_project]
