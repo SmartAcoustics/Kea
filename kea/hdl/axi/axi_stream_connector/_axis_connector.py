@@ -4,7 +4,7 @@ from kea.hdl.axi import AxiStreamInterface
 from kea.hdl.signal_handling import sig_assigner
 
 @block
-def axis_connector(clock, axis_source, axis_sink):
+def axis_connector(axis_source, axis_sink):
 
     if not isinstance(axis_source, AxiStreamInterface):
         raise TypeError(
