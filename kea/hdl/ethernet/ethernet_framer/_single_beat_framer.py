@@ -5,17 +5,14 @@ from math import ceil
 from myhdl import block, Signal, intbv, enum, always, always_comb, concat
 
 from kea.hdl.axi.axi_stream_utils import check_axi_stream_interface_attributes
+from kea.hdl.ethernet.definitions import (
+    DEST_MAC_N_OCTETS, SRC_MAC_N_OCTETS, DEST_MAC_BITWIDTH, SRC_MAC_BITWIDTH,
+    ETHERTYPE_BITWIDTH)
 from kea.hdl.signal_handling.asynchronous import (
     sig_assigner, combined_signal_assigner)
 from kea.utils.interface_checks import check_bool_signal
 
-from .ethernet_constants import (
-    DEST_MAC_N_OCTETS,
-    SRC_MAC_N_OCTETS,
-    DEST_MAC_BITWIDTH,
-    SRC_MAC_BITWIDTH,
-    ETHERTYPE_BITWIDTH,
-    ETHERNET_HEADER_N_BITS)
+from .definitions import ETHERNET_HEADER_N_BITS
 from .interfaces import EthernetHeaderValuesInterface
 
 @block

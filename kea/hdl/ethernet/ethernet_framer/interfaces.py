@@ -1,6 +1,7 @@
 from myhdl import Signal, intbv
 
-from .ethernet_constants import (
+from kea.hdl.ethernet.definitions import (
+    OCTET_BITWIDTH,
     DEST_MAC_N_OCTETS,
     SRC_MAC_N_OCTETS,
     ETHERTYPE_BITWIDTH)
@@ -14,10 +15,14 @@ class EthernetHeaderValuesInterface(object):
         self.load_values = Signal(False)
 
         for n in range(DEST_MAC_N_OCTETS):
-            setattr(self, 'dest_mac_octet_'+str(n), Signal(intbv(0)[8:]))
+            setattr(
+                self, 'dest_mac_octet_'+str(n),
+                Signal(intbv(0)[OCTET_BITWIDTH:]))
 
         for n in range(SRC_MAC_N_OCTETS):
-            setattr(self, 'src_mac_octet_'+str(n), Signal(intbv(0)[8:]))
+            setattr(
+                self, 'src_mac_octet_'+str(n),
+                Signal(intbv(0)[OCTET_BITWIDTH:]))
 
         self.ethertype = Signal(intbv(0)[ETHERTYPE_BITWIDTH:])
 

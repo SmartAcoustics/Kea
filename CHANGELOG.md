@@ -3,6 +3,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 0.15.0 - 2026-10-14
+
+### Changed
+
+- Improved the design of the `axi_stream_chunker` and clarified the spec. The behaviour has not changed.
+- Moved the ethernet constants into their own directory at `kea/hdl/ethernet/definitions` (from `kea/hdl/ethernet/ethernet_framer`.
+- Updated `test_axis_chunker`, `test_multi_beat_framer` and `test_single_beat_framer` to test long resets. The behaviour has not changed.
+- Removed the `enable` input to the `ethernet_monitor`.
+
+### Added
+
+- Added an `ethernet_header_values` connector to simplify connecting many signals to the `ethernet_framer`.
+
 ## 0.14.0 - 2026-09-04
 
 ### Removed

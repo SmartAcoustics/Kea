@@ -258,13 +258,17 @@ class TestAxisChunker(KeaTestCase):
         return return_objects
 
     @block
-    def stim_ctrl(self, reset_p, n_words_per_chunk_update_p, **dut_args):
+    def stim_ctrl(
+        self, reset_toggle_p, reset_pulse_p, n_words_per_chunk_update_p,
+        **dut_args):
 
         clock = dut_args['clock']
         reset = dut_args['reset']
         n_words_per_chunk = dut_args['n_words_per_chunk']
 
         return_objects = []
+
+        hold_reset_high = Signal(False)
 
         @always(clock.posedge)
         def stim():
@@ -273,10 +277,18 @@ class TestAxisChunker(KeaTestCase):
             # Reset #
             #########
 
-            reset.next = False
+            if random.random() < reset_toggle_p:
+                # Hold reset high for extended period
+                hold_reset_high.next = not hold_reset_high
+                reset.next = not reset
 
-            if random.random() < reset_p:
-                reset.next = True
+            elif not hold_reset_high:
+
+                reset.next = False
+
+                if random.random() < reset_pulse_p:
+                    # Randomly pulse reset
+                    reset.next = True
 
             #####################
             # N words per chunk #
@@ -318,14 +330,14 @@ class TestAxisChunker(KeaTestCase):
 
         data_upper_bound = 2**len(axis_source.TDATA)
 
-        current_n_words_per_chunk = Signal(intbv(0)[len(n_words_per_chunk):])
+        packet_n_words_per_chunk = Signal(intbv(0)[len(n_words_per_chunk):])
 
         pending_packets = deque([])
         expected_packets = {}
 
         t_state = enum(
-            'STIM', 'AWAIT_SOURCE_START', 'AWAIT_SOURCE_COMPLETE', 'CHECK',
-            'RESET')
+            'STIM', 'AWAIT_SOURCE_START', 'AWAIT_SOURCE_COMPLETE',
+            'AWAIT_SINK_COMPLETE', 'CHECK', 'RESET')
         state = Signal(t_state.STIM)
 
         @always(clock.posedge)
@@ -373,13 +385,13 @@ class TestAxisChunker(KeaTestCase):
                     axis_source_master_bfm.add_data(stim_packets)
 
                     # Keep a record of n_words_per_chunk
-                    current_n_words_per_chunk.next = n_words_per_chunk
+                    packet_n_words_per_chunk.next = n_words_per_chunk
 
                     state.next = t_state.AWAIT_SOURCE_START
 
             elif state == t_state.AWAIT_SOURCE_START:
                 if (axis_source.TVALID and axis_source.TREADY and
-                    current_n_words_per_chunk > 0):
+                    packet_n_words_per_chunk > 0):
 
                     # Extract the first packet
                     data = pending_packets.popleft()
@@ -391,14 +403,14 @@ class TestAxisChunker(KeaTestCase):
                     # Generate the expected chunks
                     expected_packets[(0, 0)].extend(
                         generate_expected_chunks(
-                            data, int(current_n_words_per_chunk.val)))
+                            data, int(packet_n_words_per_chunk.val)))
 
                     if axis_source.TLAST:
                         if len(pending_packets) > 0:
                             # There are more packets pending
 
                             # Keep a record of n_words_per_chunk
-                            current_n_words_per_chunk.next = n_words_per_chunk
+                            packet_n_words_per_chunk.next = n_words_per_chunk
 
                             # There is more data pending but it hasn't started
                             # arriving yet
@@ -406,14 +418,14 @@ class TestAxisChunker(KeaTestCase):
 
                         else:
                             # There are no more packets pending
-                            state.next = t_state.CHECK
+                            state.next = t_state.AWAIT_SINK_COMPLETE
 
                     else:
                         state.next = t_state.AWAIT_SOURCE_COMPLETE
 
                 else:
                     # Keep a record of n_words_per_chunk
-                    current_n_words_per_chunk.next = n_words_per_chunk
+                    packet_n_words_per_chunk.next = n_words_per_chunk
 
             elif state == t_state.AWAIT_SOURCE_COMPLETE:
 
@@ -426,7 +438,7 @@ class TestAxisChunker(KeaTestCase):
                         # There are more packets pending
 
                         # Keep a record of n_words_per_chunk
-                        current_n_words_per_chunk.next = n_words_per_chunk
+                        packet_n_words_per_chunk.next = n_words_per_chunk
 
                         # There is more data pending but it hasn't started
                         # arriving yet
@@ -434,7 +446,14 @@ class TestAxisChunker(KeaTestCase):
 
                     else:
                         # There are no more packets pending
-                        state.next = t_state.CHECK
+                        state.next = t_state.AWAIT_SINK_COMPLETE
+
+            elif state == t_state.AWAIT_SINK_COMPLETE:
+                if (axis_sink.TVALID and
+                    axis_sink.TREADY and
+                    axis_sink.TLAST):
+                    # The packet has finished on the output
+                    state.next = t_state.CHECK
 
             elif state == t_state.CHECK:
 
@@ -514,114 +533,144 @@ class TestAxisChunker(KeaTestCase):
 
         return_objects = []
 
-        packet_in_progress = Signal(False)
-        reset_propagation = Signal(False)
-
-        current_n_words_per_chunk = Signal(intbv(0)[len(n_words_per_chunk):])
-
+        packet_n_words_per_chunk = Signal(intbv(0)[len(n_words_per_chunk):])
         word_count = Signal(intbv(0)[len(n_words_per_chunk):])
 
-        chunk_tlast = Signal(False)
+        expected_axis_sink_tvalid = Signal(False)
+        expected_axis_sink_tlast = Signal(False)
+        expected_axis_sink_tdata = Signal(intbv(0)[len(axis_sink.TDATA):])
+
+        t_state = enum('IDLE', 'PACKET_IN_PROGRESS')
+        state = Signal(t_state.IDLE)
+
 
         @always(clock.posedge)
         def check():
 
-            ##########
-            # Checks #
-            ##########
+            #############################
+            # axis_source.TREADY checks #
+            #############################
 
-            if reset or reset_propagation:
-                # axis_source.TREADY and axis_sink.TVALID should be set low in
-                # response to a reset. The DUT needs a cycle after a reset to
-                # set up the AXIS control signals.
+            if reset or packet_n_words_per_chunk <= 0:
+                # axis_source.TREADY should be set low in response to a reset
                 assert(not axis_source.TREADY)
-                assert(not axis_sink.TVALID)
-
-                word_count.next = 0
-
-            elif not packet_in_progress and current_n_words_per_chunk <= 0:
-                # If there is no packet in progress and
-                # current_n_words_per_chunk is less than or equal to 0 then
-                # axis_source.TREADY and axis_sink.TVALID should be set low.
-                assert(not axis_source.TREADY)
-                assert(not axis_sink.TVALID)
-
-                word_count.next = 0
 
             else:
-                # Check the axis signals are passed through the DUT
-                assert(axis_source.TREADY == axis_sink.TREADY)
-                assert(axis_sink.TVALID == axis_source.TVALID)
+                # The DUT should be forwarding data to axis_sink
 
                 if axis_sink.TVALID:
-                    # The axis_sink.TVALID is high so the axis_sink.TDATA
-                    # should track the axis_source.TDATA
-                    assert(axis_sink.TDATA == axis_source.TDATA)
-
-                    if word_count >= current_n_words_per_chunk-1:
-                        # The DUT has output a chunk so TLAST should be set
-                        # high
-                        assert(axis_sink.TLAST)
-
-                    else:
-                        # The axis_sink.TLAST should track axis_source.TLAST
-                        assert(axis_sink.TLAST == axis_source.TLAST)
-
-                    if axis_sink.TREADY:
-                        # The word has been accepted by downstream
-
-                        if axis_sink.TLAST:
-                            # If axis_sink.TLAST is set high for a chunk or
-                            # because is it tracking axis_source, word_count
-                            # should be reset.
-                            word_count.next = 0
-
-                        else:
-                            # Count the words out of the DUT
-                            word_count.next = word_count + 1
-
-            #########
-            # Logic #
-            #########
-
-            if not packet_in_progress:
-
-                if axis_source.TVALID and axis_source.TREADY:
-
-                    # A packet which is longer than one word has arrived
-                    packet_in_progress.next = True
+                    # There is data on the axis_sink so the DUT should only
+                    # set axis_source.TREADY if axis_sink.TREADY is high.
+                    assert(axis_source.TREADY == axis_sink.TREADY)
 
                 else:
-                    # Keep a record of the current n words per chunk
-                    current_n_words_per_chunk.next = n_words_per_chunk
+                    # There is no data on axis_sink so axis_source.TREADY
+                    # should be high
+                    assert(axis_source.TREADY)
 
-            if (axis_source.TVALID and
-                axis_source.TREADY and
-                axis_source.TLAST):
-                # The last word of the packet has been accepted
-                current_n_words_per_chunk.next = n_words_per_chunk
-                packet_in_progress.next = False
+            ####################
+            # axis_sink checks #
+            ####################
 
-            reset_propagation.next = reset
+            assert(axis_sink.TVALID == expected_axis_sink_tvalid)
+            assert(axis_sink.TLAST == expected_axis_sink_tlast)
+            assert(axis_sink.TDATA == expected_axis_sink_tdata)
+
+            if state == t_state.IDLE:
+
+                if axis_sink.TVALID and axis_sink.TREADY:
+                    # Downstream has received the word on the axis_sink
+                    expected_axis_sink_tvalid.next = False
+
+                if axis_source.TVALID and axis_source.TREADY:
+                    # The DUT has accepted a word on the axis_source so it
+                    # should update axis_sink.
+                    expected_axis_sink_tvalid.next = True
+                    expected_axis_sink_tdata.next = axis_source.TDATA
+
+                    if axis_source.TLAST:
+                        # The packet on the axis_source is a single word
+                        expected_axis_sink_tlast.next = True
+
+                        # Update the packet_n_words_per_chunk
+                        packet_n_words_per_chunk.next = n_words_per_chunk
+
+                        state.next = t_state.IDLE
+
+                    elif packet_n_words_per_chunk <= 1:
+                        # We need to set TLAST to chunk the packet into one
+                        # word chunks
+                        expected_axis_sink_tlast.next = True
+                        word_count.next = 0
+                        state.next = t_state.PACKET_IN_PROGRESS
+
+                    else:
+                        # The chunk is longer than a single word
+                        expected_axis_sink_tlast.next = False
+                        word_count.next = 1
+                        state.next = t_state.PACKET_IN_PROGRESS
+
+                else:
+                    # Keep a record of the n_words_per_chunk
+                    packet_n_words_per_chunk.next = n_words_per_chunk
+
+            elif state == t_state.PACKET_IN_PROGRESS:
+
+                if axis_sink.TVALID and axis_sink.TREADY:
+                    # Downstream has received the word on the axis_sink
+                    expected_axis_sink_tvalid.next = False
+
+                if axis_source.TVALID and axis_source.TREADY:
+                    # The DUT has accepted a word on the axis_source so it
+                    # should update axis_sink.
+                    expected_axis_sink_tvalid.next = True
+                    expected_axis_sink_tdata.next = axis_source.TDATA
+
+                    if axis_source.TLAST:
+                        # The last word of the source packet has been received
+                        expected_axis_sink_tlast.next = True
+
+                        # Update the packet_n_words_per_chunk
+                        packet_n_words_per_chunk.next = n_words_per_chunk
+
+                        state.next = t_state.IDLE
+
+                    elif word_count >= packet_n_words_per_chunk-1:
+                        # The next word will be the last of the chunk.
+                        expected_axis_sink_tlast.next = True
+                        word_count.next = 0
+                        state.next = t_state.PACKET_IN_PROGRESS
+
+                    else:
+                        # We have not yet forwarded a chunks worth of data
+                        expected_axis_sink_tlast.next = False
+                        word_count.next = word_count + 1
+                        state.next = t_state.PACKET_IN_PROGRESS
 
             if reset:
-                packet_in_progress.next = False
+                expected_axis_sink_tvalid.next = False
+
+                # Update the packet_n_words_per_chunk
+                packet_n_words_per_chunk.next = n_words_per_chunk
+
+                state.next = t_state.IDLE
 
         return_objects.append(check)
 
         return return_objects
 
     def base_test(
-        self, reset_p=0, n_words_per_chunk_update_p=0.05,
-        vary_axis_source_tvalid=False, axis_sink_tready_p=1):
+        self, reset_toggle_p=0, reset_pulse_p=0,
+        n_words_per_chunk_update_p=0.05, vary_axis_source_tvalid=False,
+        axis_sink_tready_p=1):
 
         dut_args, dut_arg_types = dut_args_setup()
 
         if not self.testing_using_vivado:
-            cycles = 50000
+            cycles = 100000
             n_tests = 40
         else:
-            cycles = 20000
+            cycles = 50000
             n_tests = 16
 
         @block
@@ -632,7 +681,8 @@ class TestAxisChunker(KeaTestCase):
             return_objects.append(self.monitor_tests(n_tests, **dut_args))
             return_objects.append(
                 self.stim_ctrl(
-                    reset_p, n_words_per_chunk_update_p, **dut_args))
+                    reset_toggle_p, reset_pulse_p, n_words_per_chunk_update_p,
+                    **dut_args))
             return_objects.append(
                 self.stim_check_data_packets(
                     vary_axis_source_tvalid, axis_sink_tready_p, **dut_args))
@@ -651,21 +701,38 @@ class TestAxisChunker(KeaTestCase):
         ''' The `axis_chunker` should forward all data received on the
         `axis_source` to the `axis_sink`.
 
-        The `axis_chunker` should use the `axis_sink.TLAST` to separate the
-        data into chunks of `n_words_per_chunk`. Each of these chunks should
-        be an AXI stream packet.
-
-        If the number of words in a packet on `axis_source` is less than
-        `n_words_per_chunk` then the packet should be forwarded as is.
-
-        If `n_words_per_chunk` is 0, then the `axis_chunker` should hold
-        `axis_source.TREADY` and `axis_sink.TVALID` low (thereby blocking the
-        data stream).
-
         The `axis_chunker` should use the same `n_words_per_chunk` for the
         entire `axis_source` packet. This means that a packet will be
         separated into chunks of the same size, even if `n_words_per_chunk`
         changes in the middle of the packet.
+
+        To help specify the rest of the functionality we will call the value
+        of `n_words_per_chunk` which is used for an entire packet
+        `packet_n_words_per_chunk`.
+
+        The `packet_n_words_per_chunk` should be updated to
+        `n_words_per_chunk` whenever any of the following are true:
+
+            - When there isn't a valid transaction on `axis_source`
+            (`axis_source.TVALID` or `axis_source.TREADY` are low).
+            - When a packet on the source completes (`axis_source.TVALID`,
+            `axis_source.TREADY` and `axis_source.TLAST` are high).
+            - `reset` is high.
+
+        The `axis_chunker` should use the `axis_sink.TLAST` to separate the
+        data into chunks of `packet_n_words_per_chunk`. Each of these chunks
+        should be an AXI stream packet.
+
+        If the number of words in a packet on `axis_source` is less than
+        `packet_n_words_per_chunk` then the packet should be forwarded as is.
+
+        If the number of words in a packet is not a multiple of
+        `packet_n_words_per_chunk` then the last packet on `axis_sink` should
+        include all remaining data. ie the last packet on `axis_sink` won't
+        be `packet_n_words_per_chunk` words.
+
+        If `packet_n_words_per_chunk` is 0, then the `axis_chunker` should
+        hold `axis_source.TREADY` low (thereby blocking the data stream).
         '''
         self.base_test()
 
@@ -687,7 +754,9 @@ class TestAxisChunker(KeaTestCase):
         ''' While `reset` is high, the `axis_chunker` should  asynchronously
         hold `axis_source.TREADY` and `axis_sink.TVALID` low.
         '''
-        self.base_test(reset_p=0.003)
+        self.base_test(
+            reset_toggle_p=0.001,
+            reset_pulse_p=0.001)
 
     def test_reset_varying_tvalid_and_tready(self):
         ''' The `axis_chunker` should correctly handle `reset` when the
@@ -696,7 +765,8 @@ class TestAxisChunker(KeaTestCase):
         self.base_test(
             vary_axis_source_tvalid=True,
             axis_sink_tready_p=0.5,
-            reset_p=0.003)
+            reset_toggle_p=0.0005,
+            reset_pulse_p=0.001)
 
 class TestAxisChunkerVivadoVhdl(
     KeaVivadoVHDLTestCase, TestAxisChunker):

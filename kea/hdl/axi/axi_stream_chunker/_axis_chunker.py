@@ -44,173 +44,85 @@ def axis_chunker(clock, reset, n_words_per_chunk, axis_source, axis_sink):
     return_objects.append(
         sig_assigner(internal_source_tready, axis_source.TREADY))
 
-    # Create a valid_transaction signal
-    valid_transaction = Signal(False)
+    internal_sink_tvalid = Signal(False)
     return_objects.append(
-        and_gate(
-            axis_source.TVALID, internal_source_tready, valid_transaction))
-
-    en_axis_connection = Signal(False)
+        sig_assigner(internal_sink_tvalid, axis_sink.TVALID))
 
     # Create a signal to record the number of words in each chunk for this
     # packet
-    current_n_words_per_chunk = Signal(intbv(0)[len(n_words_per_chunk):])
+    packet_n_words_per_chunk = Signal(intbv(0)[len(n_words_per_chunk):])
 
     # Create a signal so we can count the number of words per chunk
     word_count = Signal(intbv(0)[len(n_words_per_chunk):])
 
-    chunk_tlast = Signal(False)
-
-    t_state = enum('IDLE', 'PACKET_IN_PROGRESS', 'LAST_WORD_OF_CHUNK')
-    state = Signal(t_state.IDLE)
+    packet_in_progress = Signal(False)
 
     @always(clock.posedge)
     def control():
 
-        if state == t_state.IDLE:
+        if axis_sink.TVALID and axis_sink.TREADY:
+            # Downstream has accepted the word
+            internal_sink_tvalid.next = False
 
-            if valid_transaction:
+        if axis_source.TVALID and internal_source_tready:
+            # We have accepted a word on the source so we must update the
+            # output. The internal_source_tready will only be set high if it
+            # is safe to update axis_sink.
 
-                # There has been a valid_transaction so data is flowing
-                word_count.next = 1
+            internal_sink_tvalid.next = True
+            axis_sink.TDATA.next = axis_source.TDATA
 
-                if not axis_source.TLAST:
-                    # It is not a one word packet.
-
-                    if current_n_words_per_chunk <= 2:
-                        # We should produce one or two word chunks. Either way
-                        # the next word will be the last of the chunk.
-                        chunk_tlast.next = True
-                        state.next = t_state.LAST_WORD_OF_CHUNK
-
-                    else:
-                        # The chunk is not yet complete
-                        chunk_tlast.next = False
-                        state.next = t_state.PACKET_IN_PROGRESS
-
-        elif state == t_state.PACKET_IN_PROGRESS:
-
-            if valid_transaction:
-
-                # Count the words
-                word_count.next = word_count + 1
-
-                if not axis_source.TLAST:
-                    # The packet has not finished so carry on chunking the
-                    # data
-
-                    if word_count >= current_n_words_per_chunk-2:
-                        # The next word will be the last of the chunk.
-                        chunk_tlast.next = True
-                        state.next = t_state.LAST_WORD_OF_CHUNK
-
-                    else:
-                        # We have not yet forwarded a chunks worth of data
-                        chunk_tlast.next = False
-                        state.next = t_state.PACKET_IN_PROGRESS
-
-                else:
-                    # The last word of the source packet has been received
-                    state.next = t_state.IDLE
-
-        elif state == t_state.LAST_WORD_OF_CHUNK:
-
-            if valid_transaction:
-
-                # Reset the word_count for the next chunk
+            if axis_source.TLAST:
+                # Last word of the packet on the source
+                axis_sink.TLAST.next = True
                 word_count.next = 0
+                packet_n_words_per_chunk.next = n_words_per_chunk
+                packet_in_progress.next = False
 
-                if not axis_source.TLAST:
-                    # This is not the last word of the packet so carry on
-                    # chunking the data
-
-                    if current_n_words_per_chunk <= 1:
-                        # The chunks should be one word so all words are the
-                        # last word of the chunk
-                        chunk_tlast.next = True
-                        state.next = t_state.LAST_WORD_OF_CHUNK
-
-                    else:
-                        # There should be more than one word in the chunk
-                        chunk_tlast.next = False
-                        state.next = t_state.PACKET_IN_PROGRESS
-
-                else:
-                    # The last word of the source packet has been received
-                    state.next = t_state.IDLE
-
-
-        if ((state==t_state.IDLE and not valid_transaction) or
-            (valid_transaction and axis_source.TLAST)):
-
-            # Either we are in the idle state and there hasn't been a valid
-            # transaction or there has been a valid transaction but it was the
-            # last word of the source packet.
-            #
-            # When in the idle state we need to keep updating the
-            # current_n_words_per_chunk until a valid transaction occurs. Once
-            # a valid transaction has occured, a word has been accepted based
-            # on the n_words_per_chunk at the time of the previous clock edge.
-            # So we should make use of that n_words_per_chunk for the entire
-            # packet.
-            #
-            # When we see the last word of a source packet we need to update
-            # current_n_words_per_chunk ready for the next packet. This is
-            # true if we are in idle (and it is a one word packet) or not.
-            current_n_words_per_chunk.next = n_words_per_chunk
-
-            if n_words_per_chunk == 0:
-                # n_words_per_chunk is set to 0 so block the stream
-                en_axis_connection.next = False
-                chunk_tlast.next = False
-
-            elif n_words_per_chunk == 1:
-                # n_words_per_chunk is set to 1 so enable the stream and
-                # hold TLAST high for every word.
-                en_axis_connection.next = True
-                chunk_tlast.next = True
+            elif word_count >= packet_n_words_per_chunk-1:
+                # This is the last word of the chunk
+                axis_sink.TLAST.next = True
+                word_count.next = 0
+                packet_in_progress.next = True
 
             else:
-                # n_words_per_chunk is greater than 1 so enable the stream
-                # and set TLAST low.
-                en_axis_connection.next = True
-                chunk_tlast.next = False
+                # Not the last word on the source or the last word of the
+                # chunk
+                axis_sink.TLAST.next = False
+                word_count.next = word_count + 1
+                packet_in_progress.next = True
+
+        elif not packet_in_progress:
+            # We haven't just accepted a word on axis_source and there isn't a
+            # packet_in_progress so packet_n_words_per_chunk can track
+            # n_words_per_chunk
+            packet_n_words_per_chunk.next = n_words_per_chunk
 
         if reset:
-            en_axis_connection.next = False
-            state.next = t_state.IDLE
+            internal_sink_tvalid.next = False
+            word_count.next = 0
+            packet_n_words_per_chunk.next = n_words_per_chunk
+            packet_in_progress.next = False
 
     return_objects.append(control)
 
     @always_comb
-    def axis_connector():
+    def ready_driver():
 
-        if en_axis_connection:
-            # The axis interface should be connected.
-
-            # Pass the sink TREADY though to the source.
+        if internal_sink_tvalid:
+            # There is data on the output so we can receive data if the
+            # receiver has set TREADY.
             internal_source_tready.next = axis_sink.TREADY
 
-            # Pass the source TVALID and TDATA through to the sink.
-            axis_sink.TVALID.next = axis_source.TVALID
-            axis_sink.TDATA.next = axis_source.TDATA
-
-            # Pass the source TLAST though to the sink and or the chunk
-            # TLAST signals into it.
-            axis_sink.TLAST.next = axis_source.TLAST or chunk_tlast
-
         else:
+            # No data on the output so we can receive data
+            internal_source_tready.next = True
 
-            # en_axis_connection is low so the source TREADY and the sink
-            # TVALID should be held low.
+        if reset or packet_n_words_per_chunk < 1:
+            # Set the internal_source_tready on reset or when the
+            # packet_n_words_per_chunk is 0
             internal_source_tready.next = False
-            axis_sink.TVALID.next = False
 
-        if reset:
-            # Reset the source TREADY and the sink TVALID.
-            internal_source_tready.next = False
-            axis_sink.TVALID.next = False
-
-    return_objects.append(axis_connector)
+    return_objects.append(ready_driver)
 
     return return_objects

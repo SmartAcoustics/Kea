@@ -5,7 +5,7 @@ from myhdl import Signal, block, always, intbv, enum
 from kea.testing.test_utils.base_test import (
     KeaTestCase, KeaVivadoVHDLTestCase, KeaVivadoVerilogTestCase)
 
-from .ethernet_constants import ETHERNET_HEADER_N_BITS
+from .definitions import ETHERNET_HEADER_N_BITS
 from .test_utils import (
     dut_args_setup,
     generate_tkeep_trailing_bytes,
@@ -324,7 +324,7 @@ class TestSingleBeatFramer(BaseEthernetFramerTests, KeaTestCase):
         the `single_beat_framer` should function correctly when packet `n`
         immediately follows packet `n-1`.
         '''
-        self.base_test(axis_data_bytewidth=16, load_values_probability=0.2)
+        self.base_test(axis_data_bytewidth=16, load_values_p=0.2)
 
     def test_varying_tvalid_and_tready(self):
         ''' The `single_beat_framer` should function correctly when the
@@ -344,7 +344,8 @@ class TestSingleBeatFramer(BaseEthernetFramerTests, KeaTestCase):
 
         A reset should not clear the header values.
         '''
-        self.base_test(axis_data_bytewidth=16, reset_probability=0.003)
+        self.base_test(
+            axis_data_bytewidth=16, reset_toggle_p=0.001, reset_pulse_p=0.003)
 
     def test_reset_varying_tvalid_and_tready(self):
         ''' The `single_beat_framer` should correctly handle `reset` when the
@@ -354,7 +355,8 @@ class TestSingleBeatFramer(BaseEthernetFramerTests, KeaTestCase):
             axis_data_bytewidth=16,
             vary_axis_source_tvalid=True,
             axis_sink_tready_probability=0.5,
-            reset_probability=0.003)
+            reset_toggle_p=0.0005,
+            reset_pulse_p=0.001)
 
     def test_reset_varying_tvalid_and_tready_larger_bitwidths(self):
         ''' The `single_beat_framer` should correctly handle `reset` when the
@@ -366,7 +368,8 @@ class TestSingleBeatFramer(BaseEthernetFramerTests, KeaTestCase):
             axis_data_bytewidth=32,
             vary_axis_source_tvalid=True,
             axis_sink_tready_probability=0.5,
-            reset_probability=0.003)
+            reset_toggle_p=0.0005,
+            reset_pulse_p=0.001)
 
 class TestTestSingleBeatFramerVivadoVhdl(
     KeaVivadoVHDLTestCase, TestSingleBeatFramer):
