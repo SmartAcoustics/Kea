@@ -2,7 +2,7 @@ from myhdl import block
 
 from kea.hdl.axi import AxiStreamInterface
 
-from .ethernet_constants import ETHERNET_HEADER_N_BITS
+from .definitions import ETHERNET_HEADER_N_BITS
 from ._multi_beat_framer import multi_beat_framer
 from ._single_beat_framer import single_beat_framer
 

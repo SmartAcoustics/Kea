@@ -42,7 +42,6 @@ def dut_args_setup():
     dut_args = {
         'clock': Signal(False),
         'reset': Signal(False),
-        'enable': Signal(False),
         'raw_ethernet_status_interface': EthernetStatusInterface(),
         'ethernet_status_interface': EthernetStatusInterface(),
         'ethernet_errors_interface': EthernetStatusInterface(),
@@ -57,7 +56,6 @@ def dut_args_setup():
     dut_arg_types = {
         'clock': 'clock',
         'reset': 'custom',
-        'enable': 'custom',
         'raw_ethernet_status_interface': ethernet_status_input_types,
         'ethernet_status_interface': ethernet_status_output_types,
         'ethernet_errors_interface': ethernet_status_output_types,
@@ -74,12 +72,12 @@ class TestEthernetMonitorInterface(KeaTestCase):
         self.dut_args, _dut_arg_types = dut_args_setup()
 
     def test_bool_ports_checked(self):
-        '''The `clock`, `reset` and `enable` ports should be boolean signals.
+        '''The `clock` and `reset` ports should be boolean signals.
 
         Anything else should raise an error.
         '''
         dut = ethernet_monitor
-        bool_port_names = ['clock', 'reset', 'enable']
+        bool_port_names = ['clock', 'reset']
 
         # Get all calls to check_bool_signal made by the DUT
         dut_function_call_arguments_list = (
@@ -183,7 +181,6 @@ class TestEthernetMonitor(KeaTestCase):
 
         clock = dut_args['clock']
         reset = dut_args['reset']
-        enable = dut_args['enable']
         raw_ethernet_status_interface = (
             dut_args['raw_ethernet_status_interface'])
 
@@ -197,6 +194,8 @@ class TestEthernetMonitor(KeaTestCase):
         raw_sfp_module_absent = (
             raw_ethernet_status_interface.sfp_module_absent)
         raw_sfp_tx_fault = raw_ethernet_status_interface.sfp_tx_fault
+
+        hold_reset_high = Signal(False)
 
         @always(clock.posedge)
         def stim():
@@ -217,21 +216,22 @@ class TestEthernetMonitor(KeaTestCase):
             if random.random() < signal_change_p:
                 raw_sfp_tx_fault.next = not raw_sfp_tx_fault
 
-            ##########
-            # Enable #
-            ##########
-
-            if random.random() < signal_change_p:
-                enable.next = not enable
-
             #########
             # Reset #
             #########
 
-            reset.next = False
+            if random.random() < 0.001:
+                # Hold reset high for extended period
+                hold_reset_high.next = not hold_reset_high
+                reset.next = not reset
 
-            if random.random() < 0.01:
-                reset.next = True
+            elif not hold_reset_high:
+
+                reset.next = False
+
+                if random.random() < 0.003:
+                    # Randomly pulse reset
+                    reset.next = True
 
         return_objects.append(stim)
 
@@ -242,7 +242,6 @@ class TestEthernetMonitor(KeaTestCase):
 
         clock = dut_args['clock']
         reset = dut_args['reset']
-        enable = dut_args['enable']
         raw_ethernet_status_interface = (
             dut_args['raw_ethernet_status_interface'])
         ethernet_status_interface = dut_args['ethernet_status_interface']
@@ -334,16 +333,16 @@ class TestEthernetMonitor(KeaTestCase):
 
             else:
 
-                if enable and not mac_clocked_locked:
+                if not mac_clocked_locked:
                     expected_mac_clock_locked_error.next = True
 
-                if enable and sfp_rx_loss_of_signal:
+                if sfp_rx_loss_of_signal:
                     expected_sfp_rx_loss_of_signal_error.next = True
 
-                if enable and sfp_module_absent:
+                if sfp_module_absent:
                     expected_sfp_module_absent_error.next = True
 
-                if enable and sfp_tx_fault:
+                if sfp_tx_fault:
                     expected_sfp_tx_fault_error.next = True
 
         return_objects.append(check)
@@ -355,10 +354,10 @@ class TestEthernetMonitor(KeaTestCase):
         dut_args, dut_arg_types = dut_args_setup()
 
         if not self.testing_using_vivado:
-            cycles = 50000
+            cycles = 100000
             n_tests = 100
         else:
-            cycles = 20000
+            cycles = 40000
             n_tests = 40
 
         @block
@@ -396,8 +395,8 @@ class TestEthernetMonitor(KeaTestCase):
             - `ethernet_status_interface.sfp_tx_fault`
 
         The `ethernet_monitor` should monitor the double buffered signals. If
-        any of them enter their active state while `enable` is high then the
-        `ethernet_monitor` should set the corresponding error high:
+        any of them enter their active state then the `ethernet_monitor`
+        should set the corresponding error high:
 
             - `ethernet_errors_interface.mac_clock_locked`
             - `ethernet_errors_interface.sfp_rx_loss_of_signal`

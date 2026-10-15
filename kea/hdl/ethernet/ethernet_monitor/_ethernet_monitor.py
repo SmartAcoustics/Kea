@@ -8,8 +8,8 @@ from .interfaces import EthernetStatusInterface
 
 @block
 def ethernet_monitor(
-    clock, reset, enable, raw_ethernet_status_interface,
-    ethernet_status_interface, ethernet_errors_interface):
+    clock, reset, raw_ethernet_status_interface, ethernet_status_interface,
+    ethernet_errors_interface):
     ''' Monitors the ethernet status.
 
     It also buffers the raw ethernet status signals and outputs the buffered
@@ -18,7 +18,6 @@ def ethernet_monitor(
 
     check_bool_signal(clock, 'clock')
     check_bool_signal(reset, 'reset')
-    check_bool_signal(enable, 'enable')
 
     if not isinstance(raw_ethernet_status_interface, EthernetStatusInterface):
         raise TypeError(
@@ -89,21 +88,19 @@ def ethernet_monitor(
     @always(clock.posedge)
     def monitor():
 
-        if enable:
+        # Monitor the status signals and set the errors #
 
-            # Monitor the status signals and set the errors #
+        if not internal_mac_clock_locked:
+            ethernet_errors_interface.mac_clock_locked.next = True
 
-            if not internal_mac_clock_locked:
-                ethernet_errors_interface.mac_clock_locked.next = True
+        if internal_sfp_rx_loss_of_signal:
+            ethernet_errors_interface.sfp_rx_loss_of_signal.next = True
 
-            if internal_sfp_rx_loss_of_signal:
-                ethernet_errors_interface.sfp_rx_loss_of_signal.next = True
+        if internal_sfp_module_absent:
+            ethernet_errors_interface.sfp_module_absent.next = True
 
-            if internal_sfp_module_absent:
-                ethernet_errors_interface.sfp_module_absent.next = True
-
-            if internal_sfp_tx_fault:
-                ethernet_errors_interface.sfp_tx_fault.next = True
+        if internal_sfp_tx_fault:
+            ethernet_errors_interface.sfp_tx_fault.next = True
 
         if reset:
 

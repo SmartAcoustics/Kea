@@ -5,7 +5,7 @@ from myhdl import Signal, block, always, intbv, enum
 from kea.testing.test_utils.base_test import (
     KeaTestCase, KeaVivadoVHDLTestCase, KeaVivadoVerilogTestCase)
 
-from .ethernet_constants import ETHERNET_HEADER_N_BITS
+from .definitions import ETHERNET_HEADER_N_BITS
 from .test_utils import (
     ethernet_header_values_interface_types_generator,
     dut_args_setup,
@@ -467,14 +467,14 @@ class TestMultiBeatFramer(BaseEthernetFramerTests, KeaTestCase):
         the `multi_beat_framer` should function correctly when packet `n`
         immediately follows packet `n-1`.
         '''
-        self.base_test(axis_data_bytewidth=4, load_values_probability=0.2)
+        self.base_test(axis_data_bytewidth=4, load_values_p=0.2)
 
     def test_rapid_header_value_updates_64_bit(self):
         ''' The `multi_beat_framer` should correclty handle rapid header value
         loading when `axis_source.TDATA` and `axis_sink.TDATA` are 64 bits
         wide.
         '''
-        self.base_test(axis_data_bytewidth=8, load_values_probability=0.2)
+        self.base_test(axis_data_bytewidth=8, load_values_p=0.2)
 
     def test_varying_tvalid_and_tready_32_bit(self):
         ''' The `multi_beat_framer` should function correctly when the
@@ -504,13 +504,15 @@ class TestMultiBeatFramer(BaseEthernetFramerTests, KeaTestCase):
 
         A reset should not clear the header values.
         '''
-        self.base_test(axis_data_bytewidth=4, reset_probability=0.003)
+        self.base_test(
+            axis_data_bytewidth=4, reset_toggle_p=0.001, reset_pulse_p=0.003)
 
     def test_reset_64_bit(self):
         ''' The `multi_beat_framer` should correctly handle `reset` when
         `axis_source.TDATA` and `axis_sink.TDATA` are 64 bits wide.
         '''
-        self.base_test(axis_data_bytewidth=8, reset_probability=0.003)
+        self.base_test(
+            axis_data_bytewidth=8, reset_toggle_p=0.001, reset_pulse_p=0.003)
 
     def test_reset_varying_tvalid_and_tready_32_bit(self):
         ''' The `multi_beat_framer` should correctly handle `reset` when the
@@ -521,7 +523,8 @@ class TestMultiBeatFramer(BaseEthernetFramerTests, KeaTestCase):
             axis_data_bytewidth=4,
             vary_axis_source_tvalid=True,
             axis_sink_tready_probability=0.5,
-            reset_probability=0.003)
+            reset_toggle_p=0.0005,
+            reset_pulse_p=0.001)
 
     def test_reset_varying_tvalid_and_tready_64_bit(self):
         ''' The `multi_beat_framer` should correctly handle `reset` when the
@@ -532,7 +535,8 @@ class TestMultiBeatFramer(BaseEthernetFramerTests, KeaTestCase):
             axis_data_bytewidth=8,
             vary_axis_source_tvalid=True,
             axis_sink_tready_probability=0.5,
-            reset_probability=0.003)
+            reset_toggle_p=0.0005,
+            reset_pulse_p=0.001)
 
 class TestTestMultiBeatFramerVivadoVhdl(
     KeaVivadoVHDLTestCase, TestMultiBeatFramer):

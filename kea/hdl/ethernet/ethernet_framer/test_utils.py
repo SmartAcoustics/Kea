@@ -9,6 +9,9 @@ from myhdl import Signal, block, always, intbv, enum, StopSimulation
 from kea.hdl.axi import (
     AxiStreamInterface, AxiStreamMasterBFM, AxiStreamSlaveBFM)
 from kea.hdl.axi.axi_stream_utils import check_axi_stream_interface_attributes
+from kea.hdl.ethernet.definitions import (
+    DEST_MAC_N_OCTETS, SRC_MAC_N_OCTETS, ETHERTYPE_N_OCTETS,
+    ETHERTYPE_BITWIDTH)
 from kea.testing.test_utils import (
     axi_stream_types_generator, generate_value_with_preferences)
 from kea.utils.interface_checks import (
@@ -16,9 +19,7 @@ from kea.utils.interface_checks import (
     get_dut_function_call_arguments,
     verify_dut_called_function)
 
-from .ethernet_constants import (
-    DEST_MAC_N_OCTETS, SRC_MAC_N_OCTETS, ETHERTYPE_BITWIDTH,
-    ETHERNET_HEADER_N_OCTETS, ETHERNET_HEADER_N_BITS)
+from .definitions import ETHERNET_HEADER_N_BITS
 from .interfaces import EthernetHeaderValuesInterface
 
 def ethernet_header_values_interface_types_generator():
@@ -199,7 +200,10 @@ def extract_packet_fields(packet, bytes_per_word):
     buffer = b''.join(
         word.to_bytes(bytes_per_word, 'little') for word in packet)
 
-    if len(buffer) < ETHERNET_HEADER_N_OCTETS:
+    ethernet_header_n_octets = (
+        DEST_MAC_N_OCTETS + SRC_MAC_N_OCTETS + ETHERTYPE_N_OCTETS)
+
+    if len(buffer) < ethernet_header_n_octets:
         raise ValueError(
             'The packet is too short to contain a full ethernet header.')
 
@@ -209,19 +213,19 @@ def extract_packet_fields(packet, bytes_per_word):
     dest_mac_octets = list(buffer[:DEST_MAC_N_OCTETS])
     src_mac_octets = list(buffer[DEST_MAC_N_OCTETS:src_mac_upper])
     ethertype = int.from_bytes(
-        buffer[src_mac_upper:ETHERNET_HEADER_N_OCTETS], 'little')
+        buffer[src_mac_upper:ethernet_header_n_octets], 'little')
 
     # The padding added by the generator absorbs the misalignment caused
     # by the 14 byte header, so its length is the distance from 14 up to
     # the next word boundary.
-    padding_len = bytes_per_word - (ETHERNET_HEADER_N_OCTETS % bytes_per_word)
+    padding_len = bytes_per_word - (ethernet_header_n_octets % bytes_per_word)
 
     # Strip the header and the trailing padding
     if padding_len:
-        payload = buffer[ETHERNET_HEADER_N_OCTETS:-padding_len]
+        payload = buffer[ethernet_header_n_octets:-padding_len]
 
     else:
-        payload = buffer[ETHERNET_HEADER_N_OCTETS:]
+        payload = buffer[ethernet_header_n_octets:]
 
     if len(payload) % bytes_per_word != 0:
         raise ValueError(
@@ -435,7 +439,7 @@ class BaseEthernetFramerTests:
 
     @block
     def stim_ctrl(
-        self, reset_probability, load_values_probability, **dut_args):
+        self, reset_toggle_p, reset_pulse_p, load_values_p, **dut_args):
 
         clock = dut_args['clock']
         reset = dut_args['reset']
@@ -443,6 +447,8 @@ class BaseEthernetFramerTests:
             dut_args['ethernet_header_values_interface'])
 
         return_objects = []
+
+        hold_reset_high = Signal(False)
 
         octet_val_upper_bound = 2**8
         ethertype_val_upper_bound = (
@@ -462,10 +468,18 @@ class BaseEthernetFramerTests:
             # Reset #
             #########
 
-            reset.next = False
+            if random.random() < reset_toggle_p:
+                # Hold reset high for extended period
+                hold_reset_high.next = not hold_reset_high
+                reset.next = not reset
 
-            if random.random() < reset_probability:
-                reset.next = True
+            elif not hold_reset_high:
+
+                reset.next = False
+
+                if random.random() < reset_pulse_p:
+                    # Randomly pulse reset
+                    reset.next = True
 
             ##########################
             # Ethernet header values #
@@ -482,7 +496,7 @@ class BaseEthernetFramerTests:
 
             ethernet_header_values_interface.load_values.next = False
 
-            if random.random() < load_values_probability:
+            if random.random() < load_values_p:
                 ethernet_header_values_interface.load_values.next = True
 
         return_objects.append(stim)
@@ -718,8 +732,8 @@ class BaseEthernetFramerTests:
 
     def base_test(
         self, axis_data_bytewidth, vary_axis_source_tvalid=False,
-        axis_sink_tready_probability=1, load_values_probability=0.007,
-        reset_probability=0):
+        axis_sink_tready_probability=1, load_values_p=0.007,
+        reset_toggle_p=0, reset_pulse_p=0):
 
         dut_args, dut_arg_types = dut_args_setup(axis_data_bytewidth)
 
@@ -738,7 +752,7 @@ class BaseEthernetFramerTests:
             return_objects.append(self.monitor_tests(n_tests, **dut_args))
             return_objects.append(
                 self.stim_ctrl(
-                    reset_probability, load_values_probability, **dut_args))
+                    reset_toggle_p, reset_pulse_p, load_values_p, **dut_args))
             return_objects.append(
                 self.stim_check_data_packets(
                     vary_axis_source_tvalid, axis_sink_tready_probability,
